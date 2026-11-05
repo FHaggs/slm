@@ -5,9 +5,10 @@ Pipeline: **Pré-treino (FineWeb-Edu) → Mid-training (chat + matemática, com 
 Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
 
 **Decisões fechadas**
-- Modelo de ~100M parâmetros, com 3B tokens no pré-treino.
+- Modelo de ~114M parâmetros, com 2,5B tokens no pré-treino.
 - Benchmark simples de matemática, rodado antes e depois do mid-training.
 - Uso de IA no código é permitido; código de terceiros adaptado continua precisando de crédito.
+- **Princípio:** nada complicado entra sem evidência de que funciona. Começamos pelo simples, e cada adição precisa de um teste.
 
 ---
 
@@ -18,7 +19,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 | Qui 05 – Sex 06 | Fases 0 e 1: ambiente, benchmark, núcleo de treino, smoke tests | Pipeline minúsculo de ponta a ponta |
 | Sex 06 – Sáb 07 | Fase 2: dados e tokenizer | Memmaps prontos |
 | Sáb 07 – Dom 08 | Fase 3: piloto com antes/depois em miniatura | **Decisão: manter a matemática ou trocar de tarefa** |
-| Seg 09 – Qua 11 | Fase 4: pré-treino final (~18h + fila) | Checkpoint publicado |
+| Seg 09 – Qua 11 | Fase 4: pré-treino final (~15h + fila) | Checkpoint publicado |
 | Qua 11 – Qui 12 | Fase 5: mid-training | Veredito da matemática |
 | Sex 13 | Fase 6: SFT | Checkpoint final |
 | Sáb 14 – Dom 15 | Fases 7 e 8: avaliação final e demo | Tabelas e demo funcionando |
@@ -27,7 +28,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 | Qui 19 | Entrega | |
 
 **Limites para acionar o plano B**
-- **Pré-treino não iniciado até Qui 12:** trocar para a config de ~72M com 2,5B tokens (~10h).
+- **Pré-treino não iniciado até Qui 12:** trocar para a config de ~84M (d=640, L=12) com 2B tokens (~8h).
 - **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados.
 
 ---
@@ -87,14 +88,14 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 
 | Hiperparâmetro | Valor |
 |---|---|
-| Vocabulário | 32.000 (BPE próprio) |
-| `d_model` / camadas | 768 / 12 |
+| Vocabulário | ~50.260 (BPE do GPT-2 + tokens de chat) |
+| `d_model` / camadas | 768 / 12 (mesma escala do `d12` do nanochat) |
 | Cabeças | 12 de query, 4 de key/value (GQA) |
 | FFN | SwiGLU, oculto ≈ 8/3 × d (2.048) |
 | Contexto | 1.024 |
-| **Total** | **≈ 100,1M** (75,5M em blocos, 24,6M em embeddings) |
+| **Total** | **≈ 114M** (75,5M em blocos, 38,6M em embeddings) |
 
-**Chinchilla:** o mínimo de 20×N dá 2B tokens. Usamos 3B (30×N), a mesma folga do exemplo do enunciado (63M → 2B = 32×N). Tempo estimado: ~18h em 2 GPUs, escalando a referência do enunciado pelo produto parâmetros de bloco × tokens; o benchmark da Fase 0 substitui esse número.
+**Chinchilla:** o mínimo de 20×N dá ~2,3B tokens. Usamos 2,5B (~22×N). O nanochat relata ótimo perto de 10×N no setup dele, então não há motivo para ir muito além do mínimo pedido no enunciado. Tempo estimado: ~15h em 2 GPUs, escalando a referência do enunciado pelo produto parâmetros de bloco × tokens; o benchmark da Fase 0 substitui esse número.
 
 | Componente | Escolha | Justificativa |
 |---|---|---|
@@ -103,19 +104,20 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 | Atenção | **GQA 12/4**, via `scaled_dot_product_attention` (Flash) | O SmolLM3 usa 4 grupos e relata desempenho igual ao de MHA; aqui economiza ~9,4M parâmetros |
 | Ativação | **SwiGLU** | Padrão da linha LLaMA |
 | Normalização | **RMSNorm** | Mais barata que LayerNorm; citada como diferencial |
-| Embeddings | **Tied**, sem weight decay | Evita gastar mais 24,6M na saída; SmolLM3 faz o mesmo |
-| Tokenizer | **BPE de 32k próprio, dígito a dígito** | Ver abaixo |
-| Otimizador | **AdamW**, comparado com **D-Muon** no piloto | As fontes divergem ([EPFL](https://arxiv.org/html/2509.01440v1), SmolLM3), e o enunciado valoriza a justificativa por experimento |
+| Embeddings | **Tied**, sem weight decay | Evita gastar mais 38,6M na saída; SmolLM3 faz o mesmo |
+| Tokenizer | **BPE do GPT-2** via `tiktoken` | Ver abaixo |
+| Otimizador | **AdamW** (WD=0,1, grad clip 1) | Simples e usado no SmolLM3. O Muon do nanochat depende de vários ajustes; não dá para validá-lo no prazo |
 | Schedule | **WSD**: warmup de ~2.000 steps, decaimento linear nos 10% finais | Usado no SmolLM3 |
 | Precisão | bf16 + `torch.compile` + DDP | Confirmar suporte a bf16 na Fase 0 |
 
 **Tokenizer**
-- **Dígito a dígito:** o BPE do GPT-2 funde dígitos de forma arbitrária (`1234` pode virar `12`+`34`), o que deve atrapalhar a aritmética. O ganho é uma hipótese, não uma medição.
-- **Vocabulário de 32k:** com 50k e 65k, os embeddings tomariam 34% e 40% dos parâmetros, contra 25% aqui.
-- **Treino:** ~90% FineWeb-Edu e ~10% chat + GSM8K treino. **Nunca** GSM8K teste.
-- **Tokens especiais:** `<|bos|>`, `<|doc_end|>`, `<|user|>`, `<|assistant|>`, `<|end|>`, `<|pad|>`. Trocar o tokenizer depois obrigaria a refazer o pré-treino.
+- **Padrão:** GPT-2 sem treinar nada. É a primeira opção listada no enunciado e não traz risco de defeito no tokenizer.
+- **Tokens especiais:** `<|endoftext|>` separa documentos; `<|user|>`, `<|assistant|>`, `<|end|>` e `<|pad|>` entram como IDs novos.
+- **Dígitos:** separar os dígitos é uma hipótese, não uma medição. O nanochat usa blocos de até 2 dígitos, escolhidos para economizar vocabulário, não por testes de aritmética. A variante só entra se ganhar no piloto (Fase 3).
+- **BPE próprio de 32k:** é o que o nanochat faz, e economizaria ~14M de parâmetros. Fica de fora porque o ganho não compensa o trabalho e o risco neste prazo.
+- **Trocar o tokenizer depois obrigaria a refazer o pré-treino**, então a decisão fecha no fim do piloto.
 
-**Não vamos adotar:** NoPE e YaRN (servem para contexto longo), truques de resíduo do nanochat, MoE, Mamba, intra-document masking, RL e ferramenta de calculadora. Nenhum cabe no prazo com ganho claro.
+**Não vamos adotar:** Muon, value embeddings, janela deslizante, QK-norm, escalares de resíduo, NoPE, YaRN, MoE, Mamba, intra-document masking, RL e ferramenta de calculadora. No nanochat, parte desses recursos ajudou, mas com um sweep de 320 runs que não temos como repetir, e vários outros testes não deram ganho.
 
 ---
 
@@ -124,9 +126,9 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 ### Pré-treino: FineWeb-Edu
 
 O dataset tem 1,53B documentos e **4,5 TB de parquet: não baixar tudo**.
-- **Amostragem:** ~12 arquivos de dumps de anos diferentes (~25 GB). Cada arquivo rende ~600M tokens (*estimativa*). Tokenizar, embaralhar por documento e cortar em 3B.
+- **Amostragem:** ~12 arquivos de dumps de anos diferentes (~25 GB). Cada arquivo rende ~600M tokens (*estimativa*). Tokenizar, embaralhar por documento e cortar em 2,5B.
 - **Validação:** ~50M tokens de um **dump não usado no treino**, excluindo URLs repetidas.
-- **Formato:** `uint16` memmap em `/scratch` (~6 GB).
+- **Formato:** `uint16` memmap em `/scratch` (~5 GB).
 - **Sampler determinístico:** permutação fixa por seed, sem reposição, com cursor salvo no checkpoint. A retomada fica exata, e a contagem de tokens também.
 
 ### Mid-training
@@ -147,6 +149,8 @@ A `numina-cot` fica de fora: tem problemas de olimpíada, muito acima do nível 
 **Pergunta:** o mid-training com matemática melhorou o modelo em matemática?
 
 **Por que não só antes/depois:** o mid-training de chat também pode mudar o resultado, então a melhora sozinha não prova que a causa foi a matemática. O run **C** resolve isso reutilizando o mesmo código, e custa só ~3,6h em uma GPU (*estimativa*). Se faltar tempo, ele é o primeiro corte.
+
+**Sobre o mid-training:** o nanochat removeu essa etapa depois de mudar o carregamento de dados, mas o enunciado a exige, então ela continua. Isso reforça a importância do controle: parte de uma melhora pode vir só da adaptação ao novo formato.
 
 ### Os testes
 
@@ -190,31 +194,31 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 - [ ] Criar o repositório GitHub; instalar `uv`, Python e PyTorch; criar `/scratch/ap211/slm`
 - [ ] Benchmark curto em 1 e 2 GPUs: tokens/s, maior batch, velocidade do `/scratch`
 
-**Saída:** bf16 confirmado e estimativa de ~18h recalculada com tokens/s medidos.
+**Saída:** bf16 confirmado e estimativa de ~15h recalculada com tokens/s medidos.
 
 ### Fase 1: Núcleo e smoke tests
 - [ ] `model.py` com contagem de parâmetros; núcleo de treino (DDP, bf16, WSD, grad clip, checkpoint, retomada, log)
-- [ ] Loss inicial ≈ ln(32000) ≈ 10,4; overfit de um mini-batch até loss perto de 0
+- [ ] Loss inicial ≈ ln(50260) ≈ 10,8; overfit de um mini-batch até loss perto de 0
 - [ ] Interromper e retomar: mesma curva e mesmo cursor
 - [ ] Testes de máscara do SFT e do alinhamento dos alvos
 - [ ] Pipeline completo com modelo minúsculo: pré → mid → SFT → eval → demo
 
 **Saída:** pipeline de ponta a ponta funcionando em menos de 1h.
 
-### Fase 2: Dados e tokenizer (jobs só de CPU)
-- [ ] Baixar os ~12 arquivos do FineWeb-Edu; treinar o tokenizer; gerar memmaps
+### Fase 2: Dados (jobs só de CPU)
+- [ ] Baixar os ~12 arquivos do FineWeb-Edu; gerar memmaps com o GPT-2
 - [ ] Preparar M, C e o dataset do SFT; rodar o script de vazamento
 
 **Saída:** contagem de tokens de cada fonte registrada; decodificação conferida manualmente.
 
 ### Fase 3: Piloto
-Modelo de ~25M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (*estimativa*).
-- [ ] 3 runs: AdamW, D-Muon e GPT clássico (LayerNorm, GELU, MHA, posição aprendida)
-- [ ] Antes/depois de matemática em miniatura
+Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (*estimativa*). O objetivo é validar o pipeline, não caçar otimizações.
+- [ ] Run base com GPT-2 + antes/depois de matemática em miniatura
+- [ ] Um único teste extra: GPT-2 com dígitos separados (~10 linhas). Adotar só se a aritmética melhorar com McNemar p < 0,05
 
-**Saída:** configuração escolhida e decisão sobre a matemática. Ressalva: o melhor no piloto pode não ser o melhor no modelo final.
+**Saída:** decisão sobre a matemática e o tokenizer. Ressalva: como alerta o próprio autor do nanochat, resultado em escala pequena pode não se transferir para o modelo final.
 
-### Fase 4: Pré-treino final (~18h em 2 GPUs)
+### Fase 4: Pré-treino final (~15h em 2 GPUs)
 - [ ] Checkpoint a cada ~30 min, mantendo os 2 últimos + marcos
 - [ ] Logar loss e perplexidade de validação; guardar amostras de geração
 
@@ -250,11 +254,11 @@ Modelo de ~25M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (*estimativa*).
 | Etapa | GPU·h |
 |---|---|
 | Benchmark e smoke tests | ~4 |
-| Pilotos (3 runs + miniatura) | ~6 |
-| Pré-treino final | ~36 |
+| Piloto (2 runs + miniatura) | ~4 |
+| Pré-treino final | ~30 |
 | Mid M e C | ~8 |
 | SFT e avaliações | ~5 |
-| **Total** | **~59** |
+| **Total** | **~51** |
 
 ---
 
@@ -264,8 +268,8 @@ Modelo de ~25M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (*estimativa*).
 slm/
 ├── README.md, PLANO.md, CREDITS.md, pyproject.toml
 ├── configs/{pilot,final}/{pretrain,mid_m,mid_c,sft}.yaml
-├── slm/            # model.py, tokenizer.py, optim.py, schedule.py, trainer.py, data.py, chat.py, generate.py
-├── scripts/        # fetch_fineweb, train_tokenizer, tokenize_pretrain, prepare_chat, check_leakage,
+├── slm/            # model.py, tokenizer.py, schedule.py, trainer.py, data.py, chat.py, generate.py
+├── scripts/        # fetch_fineweb, tokenize_pretrain, prepare_chat, check_leakage,
 │                   # pretrain, midtrain, sft, eval_ppl, eval_mc, eval_math, plot_curves, export
 ├── slurm/          # um .sbatch por etapa
 ├── app/chat.py     # Streamlit
@@ -281,7 +285,7 @@ Dados e checkpoints ficam em `/scratch/ap211/slm/`, nunca no Git.
 
 | Risco | Mitigação |
 |---|---|
-| Fila cheia perto do prazo | Pré-treino até Qua 11; limite de Qui 12 para o plano B de 72M; folga na Qua 18 |
+| Fila cheia perto do prazo | Pré-treino até Qua 11; limite de Qui 12 para o plano B de 84M; folga na Qua 18 |
 | Run interrompido | Checkpoints frequentes e retomada testada na Fase 1 |
 | `/scratch` sem backup | Copiar os marcos para `/home` e publicar no HF |
 | Matemática sem efeito | Decisão no piloto; tarefa reserva; resultado negativo reportado com IC |
@@ -292,7 +296,8 @@ Dados e checkpoints ficam em `/scratch/ap211/slm/`, nunca no Git.
 ## 10. Fontes
 
 - [SmolLM3](https://huggingface.co/blog/smollm3): GQA, WSD, otimizador
-- [nanochat](https://github.com/karpathy/nanochat): `gpt.py`, `chat_sft.py`, `tasks/gsm8k.py`
+- [nanochat](https://github.com/karpathy/nanochat): `gpt.py`, `tokenizer.py`, `tok_train.py`, `chat_sft.py`, `tasks/gsm8k.py`
+- [Beating GPT-2 for <$100: the nanochat journey](https://github.com/karpathy/nanochat/discussions/481)
 - [Benchmarking Optimizers for LLM Pretraining](https://arxiv.org/html/2509.01440v1)
 - [nanochat no DGX Spark](https://objectgraph.com/blog/nanochat-dgx-spark/)
 - Datasets via API do Hugging Face: [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu), [SmolTalk](https://huggingface.co/datasets/HuggingFaceTB/smoltalk), [GSM8K](https://huggingface.co/datasets/openai/gsm8k), [MetaMathQA](https://huggingface.co/datasets/meta-math/MetaMathQA), [SciQ](https://huggingface.co/datasets/allenai/sciq), [ARC](https://huggingface.co/datasets/allenai/ai2_arc)
