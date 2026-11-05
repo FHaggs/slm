@@ -74,7 +74,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 - **Exige `TORCHINDUCTOR_SHAPE_PADDING=0`:** a compilação falhou por falta de memória no run com a opção padrão, em um teste interno de padding.
 - **Quem limita a memória são os logits:** batch × contexto × vocabulário ocupa 6,6 GB em fp32 só para o batch de 32, por causa do vocabulário de 50k.
 - **Batch de 24 por GPU:** praticamente a mesma velocidade do batch de 32, com ~7 GB de folga para fragmentação.
-- **Ainda não medido:** velocidade em 2 GPUs. As estimativas abaixo supõem ganho quase linear.
+- **Não medido:** velocidade em 2 GPUs, que será vista no início do pré-treino. As estimativas abaixo supõem ganho quase linear.
 
 **Template de job.** Use `--mem` explícito: sem ele, o padrão observado reserva ~128 GB por GPU. Evite `--exclusive`.
 
@@ -211,9 +211,8 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 ### Fase 0: Ambiente e calibração
 - [x] Criar o repositório GitHub; instalar `uv`, Python e PyTorch; criar `/scratch/ap211/slm`
 - [x] Benchmark em 1 GPU: tokens/s, maior batch, velocidade do `/scratch`
-- [ ] Benchmark em 2 GPUs, quando as duas estiverem livres. Não deixar o job de 2 GPUs esperando na fila, para não travar a GPU livre para outros usuários
 
-**Saída:** bf16 confirmado e estimativa recalculada (cumprido em 1 GPU; falta medir em 2).
+**Saída:** bf16 confirmado e estimativa recalculada. Cumprido. A velocidade em 2 GPUs será observada nos primeiros minutos do pré-treino, que também será o primeiro uso do DDP em 2 GPUs.
 
 ### Fase 1: Núcleo e smoke tests
 - [ ] `model.py` com contagem de parâmetros; núcleo de treino (DDP, bf16, WSD, grad clip, checkpoint, retomada, log)

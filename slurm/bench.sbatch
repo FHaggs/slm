@@ -1,6 +1,5 @@
 #!/bin/bash
 # Benchmark em 1 GPU, com um processo por medida para nao herdar memoria de uma tentativa anterior.
-# A medida em 2 GPUs deve ser enviada quando as duas estiverem livres.
 #SBATCH -J slm-bench
 #SBATCH --gres=gpu:1
 #SBATCH -c 8
