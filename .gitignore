@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+logs/
+checkpoints/
+data/
+*.pt
+*.bin
+*.safetensors
+.DS_Store

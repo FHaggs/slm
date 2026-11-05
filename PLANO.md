@@ -19,7 +19,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 | Qui 05 – Sex 06 | Fases 0 e 1: ambiente, benchmark, núcleo de treino, smoke tests | Pipeline minúsculo de ponta a ponta |
 | Sex 06 – Sáb 07 | Fase 2: dados e tokenizer | Memmaps prontos |
 | Sáb 07 – Dom 08 | Fase 3: piloto com antes/depois em miniatura | **Decisão: manter a matemática ou trocar de tarefa** |
-| Seg 09 – Qua 11 | Fase 4: pré-treino final (~15h + fila) | Checkpoint publicado |
+| Seg 09 – Qua 11 | Fase 4: pré-treino final (~6h + fila) | Checkpoint publicado |
 | Qua 11 – Qui 12 | Fase 5: mid-training | Veredito da matemática |
 | Sex 13 | Fase 6: SFT | Checkpoint final |
 | Sáb 14 – Dom 15 | Fases 7 e 8: avaliação final e demo | Tabelas e demo funcionando |
@@ -28,7 +28,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 | Qui 19 | Entrega | |
 
 **Limites para acionar o plano B**
-- **Pré-treino não iniciado até Qui 12:** trocar para a config de ~84M (d=640, L=12) com 2B tokens (~8h).
+- **Sem as 2 GPUs livres até Qui 12:** rodar o pré-treino em 1 GPU (~11h), sem esperar a outra.
 - **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados.
 
 ---
@@ -56,9 +56,25 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 | Nó `CDIA01` | 2× **RTX A5000 24 GB**, 96 threads (Xeon 5318Y), 251 GB RAM | Único nó com GPU |
 | Fila | Slurm, partição `LAD_geral`, `priority/basic` (FIFO) + backfill, sem preempção, sem limite de tempo | `--time` realista ajuda o backfill; job de 2 GPUs espera as duas livres |
 | `/home` | NFS, 1,4 TB livres e compartilhados; escrita de 94 MB/s | Código, logs e resultados; não dataset |
-| `/scratch` | Disco local de 37 TB, 35 TB livres, gravável | Dados e checkpoints em `/scratch/ap211/slm`; velocidade ainda não medida; backup desconhecido |
+| `/scratch` | Disco local de 37 TB, 35 TB livres; escrita de 547 MB/s, leitura de 907 MB/s | Dados e checkpoints em `/scratch/ap211/slm`; backup desconhecido |
 | Rede no nó | HF e PyPI acessíveis | Download direto em job |
-| Python | 3.10 sem `ensurepip` nem torch; driver CUDA 12.8 | Usar `uv` em vez de `venv`; confirmar a wheel do torch na Fase 0 |
+| Python | Ambiente com `uv`: Python 3.12, PyTorch 2.11 (cu128), bf16 e Flash Attention confirmados | `sbatch slurm/setup.sbatch` recria o ambiente |
+
+**Benchmark medido em 1 GPU** (modelo de 114M, contexto de 1.024, tokens aleatórios, sem leitura de dados, avaliação nem checkpoints):
+
+| Batch | Compilado | Tokens/s | Pico de memória |
+|---|---|---|---|
+| 16 | Não | 43.105 | 20,0 GB |
+| 16 | Sim | 67.095 | 12,1 GB |
+| **24 (escolhido)** | **Sim** | **69.082** | **17,4 GB** |
+| 32 | Sim | 69.767 | 22,6 GB |
+| 48 e 64 | Sim | Sem memória | — |
+
+- **`torch.compile` é indispensável:** ganho de ~55% em velocidade, com menos memória.
+- **Exige `TORCHINDUCTOR_SHAPE_PADDING=0`:** a compilação falhou por falta de memória no run com a opção padrão, em um teste interno de padding.
+- **Quem limita a memória são os logits:** batch × contexto × vocabulário ocupa 6,6 GB em fp32 só para o batch de 32, por causa do vocabulário de 50k.
+- **Batch de 24 por GPU:** praticamente a mesma velocidade do batch de 32, com ~7 GB de folga para fragmentação.
+- **Ainda não medido:** velocidade em 2 GPUs. As estimativas abaixo supõem ganho quase linear.
 
 **Template de job.** Use `--mem` explícito: sem ele, o padrão observado reserva ~128 GB por GPU. Evite `--exclusive`.
 
@@ -75,6 +91,8 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 
 source .venv/bin/activate
 export OMP_NUM_THREADS=8
+export TORCHINDUCTOR_SHAPE_PADDING=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
     --config configs/final/pretrain.yaml --max-hours 23.5 --resume auto
 ```
@@ -95,7 +113,7 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 | Contexto | 1.024 |
 | **Total** | **≈ 114M** (75,5M em blocos, 38,6M em embeddings) |
 
-**Chinchilla:** o mínimo de 20×N dá ~2,3B tokens. Usamos 2,5B (~22×N). O nanochat relata ótimo perto de 10×N no setup dele, então não há motivo para ir muito além do mínimo pedido no enunciado. Tempo estimado: ~15h em 2 GPUs, escalando a referência do enunciado pelo produto parâmetros de bloco × tokens; o benchmark da Fase 0 substitui esse número.
+**Chinchilla:** o mínimo de 20×N dá ~2,3B tokens. Usamos 2,5B (~22×N). O nanochat relata ótimo perto de 10×N no setup dele, então não há motivo para ir muito além do mínimo pedido no enunciado. Tempo estimado: ~6h em 2 GPUs, ou ~11h em 1 GPU, partindo de 69 mil tokens/s por GPU e somando uma folga para dados, avaliação e checkpoints.
 
 | Componente | Escolha | Justificativa |
 |---|---|---|
@@ -148,7 +166,7 @@ A `numina-cot` fica de fora: tem problemas de olimpíada, muito acima do nível 
 
 **Pergunta:** o mid-training com matemática melhorou o modelo em matemática?
 
-**Por que não só antes/depois:** o mid-training de chat também pode mudar o resultado, então a melhora sozinha não prova que a causa foi a matemática. O run **C** resolve isso reutilizando o mesmo código, e custa só ~3,6h em uma GPU (*estimativa*). Se faltar tempo, ele é o primeiro corte.
+**Por que não só antes/depois:** o mid-training de chat também pode mudar o resultado, então a melhora sozinha não prova que a causa foi a matemática. O run **C** resolve isso reutilizando o mesmo código, e custa só ~1,5h em uma GPU (*estimativa*). Se faltar tempo, ele é o primeiro corte.
 
 **Sobre o mid-training:** o nanochat removeu essa etapa depois de mudar o carregamento de dados, mas o enunciado a exige, então ela continua. Isso reforça a importância do controle: parte de uma melhora pode vir só da adaptação ao novo formato.
 
@@ -191,14 +209,15 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 ## 7. Plano de passos
 
 ### Fase 0: Ambiente e calibração
-- [ ] Criar o repositório GitHub; instalar `uv`, Python e PyTorch; criar `/scratch/ap211/slm`
-- [ ] Benchmark curto em 1 e 2 GPUs: tokens/s, maior batch, velocidade do `/scratch`
+- [x] Criar o repositório GitHub; instalar `uv`, Python e PyTorch; criar `/scratch/ap211/slm`
+- [x] Benchmark em 1 GPU: tokens/s, maior batch, velocidade do `/scratch`
+- [ ] Benchmark em 2 GPUs, quando as duas estiverem livres. Não deixar o job de 2 GPUs esperando na fila, para não travar a GPU livre para outros usuários
 
-**Saída:** bf16 confirmado e estimativa de ~15h recalculada com tokens/s medidos.
+**Saída:** bf16 confirmado e estimativa recalculada (cumprido em 1 GPU; falta medir em 2).
 
 ### Fase 1: Núcleo e smoke tests
 - [ ] `model.py` com contagem de parâmetros; núcleo de treino (DDP, bf16, WSD, grad clip, checkpoint, retomada, log)
-- [ ] Loss inicial ≈ ln(50260) ≈ 10,8; overfit de um mini-batch até loss perto de 0
+- [ ] Loss inicial ≈ 10,98 (medido: ln(50261) ≈ 10,82, mais ~0,15 pela variância dos logits na inicialização); overfit de um mini-batch até loss perto de 0
 - [ ] Interromper e retomar: mesma curva e mesmo cursor
 - [ ] Testes de máscara do SFT e do alinhamento dos alvos
 - [ ] Pipeline completo com modelo minúsculo: pré → mid → SFT → eval → demo
@@ -212,13 +231,13 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 **Saída:** contagem de tokens de cada fonte registrada; decodificação conferida manualmente.
 
 ### Fase 3: Piloto
-Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (*estimativa*). O objetivo é validar o pipeline, não caçar otimizações.
+Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mil tokens/s, mais folga). O objetivo é validar o pipeline, não caçar otimizações.
 - [ ] Run base com GPT-2 + antes/depois de matemática em miniatura
 - [ ] Um único teste extra: GPT-2 com dígitos separados (~10 linhas). Adotar só se a aritmética melhorar com McNemar p < 0,05
 
 **Saída:** decisão sobre a matemática e o tokenizer. Ressalva: como alerta o próprio autor do nanochat, resultado em escala pequena pode não se transferir para o modelo final.
 
-### Fase 4: Pré-treino final (~15h em 2 GPUs)
+### Fase 4: Pré-treino final (~6h em 2 GPUs, batch de 24 por GPU)
 - [ ] Checkpoint a cada ~30 min, mantendo os 2 últimos + marcos
 - [ ] Logar loss e perplexidade de validação; guardar amostras de geração
 
@@ -253,12 +272,12 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (*estimativa*).
 
 | Etapa | GPU·h |
 |---|---|
-| Benchmark e smoke tests | ~4 |
+| Benchmark e smoke tests | ~3 |
 | Piloto (2 runs + miniatura) | ~4 |
-| Pré-treino final | ~30 |
-| Mid M e C | ~8 |
-| SFT e avaliações | ~5 |
-| **Total** | **~51** |
+| Pré-treino final | ~12 |
+| Mid M e C | ~3 |
+| SFT e avaliações | ~3 |
+| **Total** | **~25** |
 
 ---
 
@@ -285,7 +304,8 @@ Dados e checkpoints ficam em `/scratch/ap211/slm/`, nunca no Git.
 
 | Risco | Mitigação |
 |---|---|
-| Fila cheia perto do prazo | Pré-treino até Qua 11; limite de Qui 12 para o plano B de 84M; folga na Qua 18 |
+| Fila cheia perto do prazo | Pré-treino até Qua 11; a partir de Qui 12, rodar em 1 GPU; folga na Qua 18 |
+| Falta de memória na GPU durante o treino | Batch de 24 (~7 GB de folga); avaliação sem gradiente e com batch menor |
 | Run interrompido | Checkpoints frequentes e retomada testada na Fase 1 |
 | `/scratch` sem backup | Copiar os marcos para `/home` e publicar no HF |
 | Matemática sem efeito | Decisão no piloto; tarefa reserva; resultado negativo reportado com IC |
