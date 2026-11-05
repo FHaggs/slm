@@ -54,7 +54,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 |---|---|---|
 | Login `CDIA` | 2 CPUs, 3,8 GB, já usando swap | Só editar e submeter; **nada pesado aqui** |
 | Nó `CDIA01` | 2× **RTX A5000 24 GB**, 96 threads (Xeon 5318Y), 251 GB RAM | Único nó com GPU |
-| Fila | Slurm, partição `LAD_geral`, `priority/basic` (FIFO) + backfill, sem preempção, sem limite de tempo | `--time` realista ajuda o backfill; job de 2 GPUs espera as duas livres |
+| Fila | Slurm, partição `LAD_geral`, `priority/basic` (FIFO) + backfill, sem preempção, sem limite de tempo; **máximo de 1 job por usuário, somando os que rodam e os da fila** | Etapas rodam uma de cada vez; não dá para encadear jobs nem preparar dados durante um treino; `--time` realista ajuda o backfill |
 | `/home` | NFS, 1,4 TB livres e compartilhados; escrita de 94 MB/s | Código, logs e resultados; não dataset |
 | `/scratch` | Disco local de 37 TB, 35 TB livres; escrita de 547 MB/s, leitura de 907 MB/s | Dados e checkpoints em `/scratch/ap211/slm`; backup desconhecido |
 | Rede no nó | HF e PyPI acessíveis | Download direto em job |
@@ -94,10 +94,11 @@ export OMP_NUM_THREADS=8
 export TORCHINDUCTOR_SHAPE_PADDING=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
-    --config configs/final/pretrain.yaml --max-hours 23.5 --resume auto
+    --config configs/final/pretrain.yaml --max-hours 23.5
 ```
 
 - **Corte por tempo:** o rank 0 decide, com `--max-hours`, salvar e sair antes do limite. É mais simples que sinais, porque o `torchrun` não repassa `SIGUSR1`.
+- **Retomada automática:** repetir o mesmo comando continua do último checkpoint, mesmo com outro número de GPUs.
 - **Runs de 1 GPU** (pilotos, mid, SFT) usam `--gres=gpu:1`, sem esperar as duas.
 
 ---
@@ -160,6 +161,8 @@ O dataset tem 1,53B documentos e **4,5 TB de parquet: não baixar tudo**.
 
 A `numina-cot` fica de fora: tem problemas de olimpíada, muito acima do nível deste modelo. Não há aritmética sintética no treino, para o benchmark não testar exatamente o que foi treinado.
 
+O preparo conta tokens de conversa, e os registros ainda têm padding (~20% na miniatura, com contexto de 256). Na Fase 2, medir essa fração com contexto de 1.024 e definir o treino por `epochs`, para cobrir cada conversa uma vez.
+
 ---
 
 ## 6. Benchmark de matemática: antes e depois
@@ -176,7 +179,7 @@ Os dois usam **o mesmo prompt em texto simples em todos os checkpoints**. O mode
 
 | Teste | Exemplo | Nota |
 |---|---|---|
-| **Aritmética** (principal), ~300 itens em cada uma de 6 células: +, −, × com 1 e 2 dígitos, seed fixa | `17 + 25 =` | Número gerado exatamente igual ao correto |
+| **Aritmética** (principal), 6 células: +, −, × com 1 e 2 dígitos, seed fixa. 1 dígito: todas as combinações (81 ou 45 itens); 2 dígitos: 300 itens | `17 + 25 =` | Número gerado exatamente igual ao correto |
 | **GSM8K teste** (n=1.319), com 3 exemplos fixos do GSM8K treino no prompt | Problema de texto | Último número da resposta, comparado numericamente; "sem resposta" é erro |
 
 Expectativa: acerto baixo no GSM8K. Reproduções do nanochat, com modelos muito maiores, relatam [~3% no mid e ~6% no SFT](https://objectgraph.com/blog/nanochat-dgx-spark/). Por isso a aritmética é o teste principal e o GSM8K mede se houve transferência para raciocínio.
@@ -196,7 +199,7 @@ Um resultado negativo também é um resultado válido para a apresentação.
 
 ### Vazamento
 
-Script simples: normalizar o texto e buscar as perguntas do GSM8K teste (correspondência exata) em toda a matemática de treino. No MetaMathQA, comparar também a coluna `original_question`, que guarda a pergunta antes da paráfrase. Remover e reportar os casos. Fora do MetaMathQA, a checagem não pega paráfrases.
+Feito dentro de `scripts/prepare_chat.py`: normalizar o texto e buscar as perguntas do GSM8K teste (correspondência exata) em toda a matemática de treino. No MetaMathQA, comparar também a coluna `original_question`, que guarda a pergunta antes da paráfrase. Remover e reportar os casos. Fora do MetaMathQA, a checagem não pega paráfrases.
 
 ### Decisão no piloto (Dom 08)
 
@@ -215,17 +218,22 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 **Saída:** bf16 confirmado e estimativa recalculada. Cumprido. A velocidade em 2 GPUs será observada nos primeiros minutos do pré-treino, que também será o primeiro uso do DDP em 2 GPUs.
 
 ### Fase 1: Núcleo e smoke tests
-- [ ] `model.py` com contagem de parâmetros; núcleo de treino (DDP, bf16, WSD, grad clip, checkpoint, retomada, log)
-- [ ] Loss inicial ≈ 10,98 (medido: ln(50261) ≈ 10,82, mais ~0,15 pela variância dos logits na inicialização); overfit de um mini-batch até loss perto de 0
-- [ ] Interromper e retomar: mesma curva e mesmo cursor
-- [ ] Testes de máscara do SFT e do alinhamento dos alvos
-- [ ] Pipeline completo com modelo minúsculo: pré → mid → SFT → eval → demo
+- [x] `model.py` com contagem de parâmetros; núcleo de treino (DDP, bf16, WSD, grad clip, checkpoint, retomada, log)
+- [x] Loss inicial ≈ 10,98 (medido: ln(50261) ≈ 10,82, mais ~0,15 pela variância dos logits na inicialização); overfit de um mini-batch até loss perto de 0
+- [x] Interromper e retomar: pesos finais idênticos aos de um treino sem interrupção
+- [x] Testes de máscara do SFT e do alinhamento dos alvos
+- [x] Pipeline completo com dados reais e modelo de 11M: pré → mid → SFT → eval, em 4 minutos; demo testada com o checkpoint
 
-**Saída:** pipeline de ponta a ponta funcionando em menos de 1h.
+**Saída:** cumprida; 44 testes automatizados passando (`sbatch slurm/tests.sbatch`).
+
+**Limites do que foi validado**
+- O DDP foi testado com 2 processos em CPU, não em 2 GPUs. O primeiro uso em GPU será o pré-treino.
+- A geração e os benchmarks da miniatura não dizem nada sobre o modelo final: 11M e 20M de tokens são pouco para qualquer conclusão.
+- A demo foi testada sem navegador e usando CPU. Falta rodar em notebook.
 
 ### Fase 2: Dados (jobs só de CPU)
 - [ ] Baixar os ~12 arquivos do FineWeb-Edu; gerar memmaps com o GPT-2
-- [ ] Preparar M, C e o dataset do SFT; rodar o script de vazamento
+- [ ] Preparar M, C e o dataset do SFT; conferir a contagem de vazamento no `meta.json`
 
 **Saída:** contagem de tokens de cada fonte registrada; decodificação conferida manualmente.
 
@@ -244,8 +252,9 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 
 ### Fase 5: Mid-training
 - [ ] Pesos do pré-treino, otimizador zerado, LR 1e-4 a 3e-4, warmup curto, 300M tokens
-- [ ] Rodar M e C (podem ser simultâneos, um em cada GPU)
+- [ ] Rodar M e C em sequência, no mesmo job (limite de 1 job por usuário)
 - [ ] Rodar os testes e aplicar o critério da Seção 6
+- [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242)
 
 **Saída:** veredito e checkpoint publicado.
 
@@ -286,9 +295,8 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 slm/
 ├── README.md, PLANO.md, CREDITS.md, pyproject.toml
 ├── configs/{pilot,final}/{pretrain,mid_m,mid_c,sft}.yaml
-├── slm/            # model.py, tokenizer.py, schedule.py, trainer.py, data.py, chat.py, generate.py
-├── scripts/        # fetch_fineweb, tokenize_pretrain, prepare_chat, check_leakage,
-│                   # pretrain, midtrain, sft, eval_ppl, eval_mc, eval_math, plot_curves, export
+├── slm/            # model, tokenizer, schedule, trainer, checkpoint, data, chat, generate, evaluation
+├── scripts/        # tokenize_pretrain, prepare_chat, pretrain, midtrain, sft, evaluate, compare, plot_curves, export
 ├── slurm/          # um .sbatch por etapa
 ├── app/chat.py     # Streamlit
 ├── tests/          # máscara, alinhamento, retomada, overfit

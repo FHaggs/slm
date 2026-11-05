@@ -1,0 +1,13 @@
+run_dir: ${SLM_SCRATCH}/runs/smoke/sft
+data_dir: ${SLM_SCRATCH}/data/smoke/sft/train
+val_dir: ${SLM_SCRATCH}/data/smoke/sft/val
+init_from: ${SLM_SCRATCH}/runs/smoke/mid/final.pt
+use_loss_mask: true
+epochs: 1
+batch_size: 32
+peak_lr: 3.0e-5
+warmup_tokens: 100000
+log_every: 20
+eval_every: 100
+eval_batches: 10
+ckpt_every: 100

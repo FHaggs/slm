@@ -1,0 +1,19 @@
+# Pipeline em miniatura (Fase 1): valida o fluxo, nao a qualidade do modelo.
+run_dir: ${SLM_SCRATCH}/runs/smoke/pretrain
+data_dir: ${SLM_SCRATCH}/data/smoke/pretrain/train
+val_dir: ${SLM_SCRATCH}/data/smoke/pretrain/val
+max_tokens: 20000000
+batch_size: 32
+peak_lr: 1.0e-3
+warmup_tokens: 1000000
+log_every: 200
+eval_every: 1000
+eval_batches: 10
+ckpt_every: 1000
+model:
+  d_model: 192
+  n_layer: 4
+  n_head: 6
+  n_kv_head: 2
+  ffn_hidden: 512
+  max_seq_len: 256

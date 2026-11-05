@@ -1,0 +1,12 @@
+run_dir: ${SLM_SCRATCH}/runs/smoke/mid
+data_dir: ${SLM_SCRATCH}/data/smoke/mid/train
+val_dir: ${SLM_SCRATCH}/data/smoke/mid/val
+init_from: ${SLM_SCRATCH}/runs/smoke/pretrain/final.pt
+max_tokens: 3000000
+batch_size: 32
+peak_lr: 3.0e-4
+warmup_tokens: 200000
+log_every: 50
+eval_every: 200
+eval_batches: 10
+ckpt_every: 200
