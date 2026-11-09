@@ -56,7 +56,7 @@ Atualizado em 05/11/2026. **Prazo: 19/11/2026** (14 dias). Os itens marcados com
 | Nó `CDIA01` | 2× **RTX A5000 24 GB**, 96 threads (Xeon 5318Y), 251 GB RAM | Único nó com GPU |
 | Fila | Slurm, partição `LAD_geral`, `priority/basic` (FIFO) + backfill, sem preempção, sem limite de tempo; **máximo de 1 job por usuário, somando os que rodam e os da fila** | Etapas rodam uma de cada vez; não dá para encadear jobs nem preparar dados durante um treino; `--time` realista ajuda o backfill |
 | `/home` | NFS, 1,4 TB livres e compartilhados; escrita de 94 MB/s | Código, logs e resultados; não dataset |
-| `/scratch` | Disco local de 37 TB, 35 TB livres; escrita de 547 MB/s, leitura de 907 MB/s | Dados e checkpoints em `/scratch/ap211/slm`; backup desconhecido |
+| `/scratch` | Disco local de 37 TB, 35 TB livres; escrita de 547 MB/s, leitura de 907 MB/s | Dados e checkpoints em `/scratch/ap211/slm-shared` (ver `DADOS.md`); caches em `/scratch/ap211/slm`; backup desconhecido |
 | Rede no nó | HF e PyPI acessíveis | Download direto em job |
 | Python | Ambiente com `uv`: Python 3.12, PyTorch 2.11 (cu128), bf16 e Flash Attention confirmados | `sbatch slurm/setup.sbatch` recria o ambiente |
 
@@ -303,7 +303,7 @@ slm/
 └── results/        # JSONs e gráficos versionados
 ```
 
-Dados e checkpoints ficam em `/scratch/ap211/slm/`, nunca no Git.
+Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutura, permissões e formato em `DADOS.md`.
 
 ---
 
