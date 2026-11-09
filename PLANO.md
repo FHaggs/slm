@@ -232,10 +232,13 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 - A demo foi testada sem navegador e usando CPU. Falta rodar em notebook.
 
 ### Fase 2: Dados (jobs só de CPU)
-- [ ] Baixar os ~12 arquivos do FineWeb-Edu; gerar memmaps com o GPT-2
-- [ ] Preparar M, C e o dataset do SFT; conferir a contagem de vazamento no `meta.json`
+- [x] Baixar os 12 arquivos do FineWeb-Edu; gerar memmaps com o GPT-2
+- [x] Preparar M, C e o dataset do SFT; conferir a contagem de vazamento no `meta.json`
 
-**Saída:** contagem de tokens de cada fonte registrada; decodificação conferida manualmente.
+**Saída:** cumprida em 43 min de CPU (`sbatch slurm/data.sbatch`). Contagens, local e conferências em `DADOS.md`.
+- **Pré-treino:** 2,5B tokens de treino e 50M de validação, de um dump que o treino não usa.
+- **Vazamento:** 0 perguntas do GSM8K teste nos dados de chat, confirmado por busca independente nos tokens.
+- **Padding:** 19% a 22% dos registros de chat com contexto de 1.024; M e C ficam com quase os mesmos tokens úteis (~294M e ~292M).
 
 ### Fase 3: Piloto
 Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mil tokens/s, mais folga). O objetivo é validar o pipeline, não caçar otimizações.
