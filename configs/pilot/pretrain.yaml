@@ -1,0 +1,20 @@
+# Fase 3 (piloto): valida o pipeline com os dados reais, nao a qualidade do modelo final.
+# Arquitetura do preset "pilot" de scripts/bench.py: 31,9M params, 184 mil tok/s em 1 A5000 com batch 32.
+run_dir: ${SLM_SCRATCH}/runs/pilot/pretrain
+data_dir: ${SLM_SHARED}/data/pretrain/train
+val_dir: ${SLM_SHARED}/data/pretrain/val
+max_tokens: 500000000     # ~15.300 steps de 32.768 tokens (~45 min no benchmark)
+batch_size: 32            # batch 64 estourou a memoria no benchmark
+peak_lr: 1.0e-3           # mesmo valor do smoke; a curva de loss do piloto valida a escolha
+warmup_tokens: 20000000   # ~600 steps
+log_every: 100
+eval_every: 1000
+eval_batches: 100
+ckpt_every: 2000          # ~6 min
+model:
+  d_model: 384
+  n_layer: 8
+  n_head: 6
+  n_kv_head: 2
+  ffn_hidden: 1024
+  max_seq_len: 1024
