@@ -19,7 +19,7 @@ Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação 
 | Datas | Etapa | Marco |
 |---|---|---|
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
-| Ter 10 – Qui 12 | Fase 3: piloto (job 1140, 1º da fila; início previsto pelo Slurm: Qui 12, 06h56) | **Decisão: manter a matemática ou trocar de tarefa; tokenizer** |
+| Ter 10 – Qua 11 | Fase 3: piloto ✅ (job 1140, Qua 11, 13h54–15h24) | **Decisão (pendente do grupo): manter a matemática; tokenizer GPT-2** |
 | Qua 11 – Sex 13 | Fase 4: pré-treino final (~6h em 2 GPUs ou ~11h em 1 GPU, + fila) | Checkpoint publicado |
 | Sex 13 – Sáb 14 | Fase 5: mid-training M e C | Veredito da matemática |
 | Sáb 14 | Fase 6: SFT | Checkpoint final |
@@ -206,6 +206,8 @@ Feito dentro de `scripts/prepare_chat.py`: normalizar o texto e buscar as pergun
 
 Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se** a aritmética não se mexer em M comparado ao pré-treino, ou se o preparo dos dados travar.
 
+**Resultado (11/11):** a aritmética se mexeu (M 2,9% contra 0,9% do pré-treino, p = 0,0003). Pela regra, a matemática fica; a decisão final é do grupo. Detalhes na Fase 3.
+
 **Tarefa reserva: ciências.** Treinar com SciQ e testar com ARC-Easy, por log-likelihood. O benchmark ARC é um dos aceitos pelo enunciado e funciona igual antes e depois. O resto do pipeline não muda. Limitação: o SciQ tem só 11.679 linhas de treino, então a dose será bem menor que os 25% da matemática, mesmo repetindo os dados.
 
 ---
@@ -243,14 +245,37 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 
 ### Fase 3: Piloto
 Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mil tokens/s, mais folga). O objetivo é validar o pipeline, não caçar otimizações.
-- [ ] Run base com GPT-2 + antes/depois de matemática em miniatura
+- [x] Run base com GPT-2 + antes/depois de matemática em miniatura
   - Configs em `configs/pilot/` e job em `slurm/pilot.sbatch`: pré-treino de 500M tokens → mid M e C de 100M tokens cada → avaliação dos 3 checkpoints → McNemar (M × pré e M × C). Lê os dados de `slm-shared` e grava em `/scratch/$USER/slm`.
-  - *Estimativa* do job completo: ~1h40–2h30 em 1 GPU. A avaliação final não foi medida e pesa mais que o previsto: a geração do GSM8K não usa cache de atenção (`slm/generate.py`). Limite do job: 6h, aumentado com `scontrol update` em 11/11 sem perder a posição na fila.
-  - Job 1140 (`ap205`) na fila desde Ter 10/11, 14h13. Em 11/11 é o 1º da fila; as 2 GPUs estão ocupadas por jobs de outras turmas, e o Slurm prevê o início para Qui 12, 06h56 (teto: fim do limite do job que ocupa a GPU).
+  - **Rodou em 11/11, das 13h54 às 15h24 (1h30), job 1140 (`ap205`), em 1 RTX A5000: `COMPLETED`.** A GPU liberou antes do previsto porque o job da frente terminou antes do limite.
+  - **Pré-treino:** 500.006.912 tokens em 15.259 steps, a ~182 mil tokens/s (igual ao benchmark: a leitura do `/scratch` não atrasou). Perplexidade de validação de 54.692 para **32,5**; o decaimento do WSD nos 10% finais baixou de 39,3 para 32,5. LR 1e-3 estável nessa escala.
+  - **Mid-training:** M e C com 100.007.936 tokens cada (3.052 steps). Perplexidade na validação do chat: de 41,2 para 8,4 (M) e 7,8 (C).
+
+    | Métrica | Pré-treino | M (chat + mat.) | C (só chat) |
+    |---|---|---|---|
+    | Perplexidade no FineWeb (val) | **32,4** | 61,4 | 56,4 |
+    | HellaSwag (acaso = 25%) | 26,3% | 26,2% | 26,4% |
+    | ARC-Easy | **43,4%** | 34,9% | 33,7% |
+    | Aritmética (1.107 itens) | 0,9% (10) | **2,9% (32)** | 1,3% (14) |
+    | GSM8K teste (1.319) | 1,5% (20) | **2,1% (28)** | 1,1% (14) |
+    | GSM8K: respondeu com um número | 71,6% | 93,7% | 49,7% |
+    | GSM8K: acerto entre as respondidas | 2,1% | 2,3% | 2,1% |
+
+    | McNemar (p) | Aritmética | GSM8K | ARC-Easy | HellaSwag |
+    |---|---|---|---|---|
+    | M × pré-treino | **0,0003** (M melhor) | 0,30 | **3e-18** (M pior) | 0,97 |
+    | M × C | **0,006** (M melhor) | **0,024** (M melhor) | 0,11 | 0,59 |
+
+  - **Critério 1 (principal): atendido.** M acerta mais aritmética que o pré-treino e que C. O ganho está concentrado em 1 dígito: soma (12,3% contra 1,2% em C) e multiplicação (17,3% contra 3,7%). Com 2 dígitos, os três ficam perto de 0. Na subtração de 1 dígito, C acerta mais que M (7 contra 3 de 45 itens).
+  - **Curva durante o mid:** em M, a aritmética sobe de forma quase contínua (0,9% → 2,9%); em C, oscila entre 0,5% e 1,8%. Isso indica tendência, não ruído no ponto final.
+  - **Critério 2 (transferência):** M supera C no GSM8K (p = 0,024), mas o acerto entre as perguntas respondidas é praticamente igual nos três (~2,1–2,3%). O ganho vem de M responder com um número com mais frequência: é efeito de formato, não de raciocínio.
+  - **Critério 3 (HellaSwag):** M fica 0,1 pp abaixo de C, dentro da regra. Pouco informativo: os três estão no nível do acaso.
+  - **Achados extras:** o mid-training derruba o ARC-Easy em ~9 pp e quase dobra a perplexidade no FineWeb, em M e em C, então o efeito é do chat, não da matemática. Hipótese não verificada para o ARC: mudança de formato (prompt em texto simples depois de treinar em chat).
 - [ ] Um único teste extra: GPT-2 com dígitos separados. Adotar só se a aritmética melhorar com McNemar p < 0,05
   - Custo maior que as ~10 linhas previstas: o trainer recusa checkpoint e dados com tokenizers diferentes, então o teste exige retokenizar o pré-treino (ou parte dele) e o chat. Decidir depois do run base.
+  - **Recomendação (11/11, pendente do grupo): não fazer.** Exigiria retokenizar os dados e rodar outro piloto, atrasando o pré-treino final, sem indício de que o GPT-2 padrão seja um gargalo.
 
-**Saída:** decisão sobre a matemática e o tokenizer. Ressalva: como alerta o próprio autor do nanochat, resultado em escala pequena pode não se transferir para o modelo final.
+**Saída:** decisão sobre a matemática e o tokenizer (pendente do grupo; recomendação: manter a matemática e o GPT-2 padrão). Ressalva: como alerta o próprio autor do nanochat, resultado em escala pequena pode não se transferir para o modelo final.
 
 ### Fase 4: Pré-treino final (~6h em 2 GPUs, batch de 24 por GPU)
 - [ ] Checkpoint a cada ~30 min, mantendo os 2 últimos + marcos
@@ -262,7 +287,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [ ] Pesos do pré-treino, otimizador zerado, LR 1e-4 a 3e-4, warmup curto, 300M tokens
 - [ ] Rodar M e C em sequência, no mesmo job (limite de 1 job por usuário)
 - [ ] Rodar os testes e aplicar o critério da Seção 6
-- [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242)
+- [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242); no piloto, de 32,4 para 61,4 (M) e 56,4 (C)
 
 **Saída:** veredito e checkpoint publicado.
 
@@ -289,11 +314,11 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 | Etapa | GPU·h |
 |---|---|
 | Benchmark e smoke tests | ~3 |
-| Piloto (2 runs + miniatura) | ~4 |
+| Piloto (1 run; realizado em 11/11) | 1,5 |
 | Pré-treino final | ~12 |
 | Mid M e C | ~3 |
 | SFT e avaliações | ~3 |
-| **Total** | **~25** |
+| **Total** | **~22,5** |
 
 ---
 
@@ -323,7 +348,8 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 | Falta de memória na GPU durante o treino | Batch de 24 (~7 GB de folga); avaliação sem gradiente e com batch menor |
 | Run interrompido | Checkpoints frequentes e retomada testada na Fase 1 |
 | `/scratch` sem backup | Copiar os marcos para `/home` e publicar no HF |
-| Matemática sem efeito | Decisão no piloto; tarefa reserva; resultado negativo reportado com IC |
+| Matemática sem efeito | Piloto (11/11): efeito significativo na aritmética (M × pré p = 0,0003; M × C p = 0,006), concentrado em 1 dígito. Tarefa reserva mantida; resultado negativo reportado com IC |
+| Mid-training piora o conhecimento geral | No piloto, o ARC-Easy caiu ~9 pp e a perplexidade no FineWeb quase dobrou após o mid (M e C). Medir no modelo final e discutir nos slides |
 | Geração em CPU lenta na demo | Medir com antecedência; vídeo de reserva |
 
 ---

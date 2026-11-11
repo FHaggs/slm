@@ -32,6 +32,7 @@ O diretório fica dentro de `/scratch/ap211/` de propósito: a raiz `/scratch` t
 Os caminhos vêm das variáveis `SLM_SCRATCH` (caches) e `SLM_SHARED` (dados persistentes), definidas nos `.sbatch`.
 
 **Piloto (Fase 3):** só **lê** do diretório compartilhado. Grava os runs em `/scratch/$USER/slm/runs/pilot/{pretrain,mid_m,mid_c}` (checkpoints e `metrics.jsonl`, por usuário), o cache dos benchmarks em `/scratch/$USER/slm/hf-cache` e os resultados em `results/pilot/*.json` no clone. O `slurm/pilot.sbatch` aborta se `SLM_SCRATCH` estiver dentro de `SLM_SHARED`.
+Execução de 11/11 (job 1140): os `final.pt` de pré-treino, M e C ficaram em `/scratch/ap205/slm/runs/pilot/`, e os resultados em `results/pilot/{pretrain,mid_m,mid_c}.json` no clone do `ap205`, ainda não versionados.
 
 ## Formato
 
