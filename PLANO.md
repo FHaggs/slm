@@ -2,7 +2,7 @@
 
 Pipeline: **Pré-treino (FineWeb-Edu) → Mid-training (chat + matemática, com benchmark antes e depois) → SFT → Avaliação & Demo**
 
-Atualizado em 10/11/2026. **Prazo: 19/11/2026** (9 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
+Atualizado em 11/11/2026. **Prazo: 19/11/2026** (8 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
 
 **Decisões fechadas**
 - Modelo de ~114M parâmetros, com 2,5B tokens no pré-treino.
@@ -14,12 +14,12 @@ Atualizado em 10/11/2026. **Prazo: 19/11/2026** (9 dias). Os itens marcados como
 
 ## 1. Calendário
 
-Revisado em 10/11: a Fase 3 começou com ~2 dias de atraso em relação ao calendário original, e a folga de Qua 18 foi absorvida. As datas a partir da Fase 4 dependem da fila de GPU, que é compartilhada com outras turmas.
+Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação ao calendário original, e a folga de Qua 18 foi absorvida. As datas a partir da Fase 4 dependem da fila de GPU, que é compartilhada com outras turmas.
 
 | Datas | Etapa | Marco |
 |---|---|---|
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
-| Ter 10 – Qua 11 | Fase 3: piloto (job 1140 na fila desde Ter 10, aguardando GPU) | **Decisão: manter a matemática ou trocar de tarefa; tokenizer** |
+| Ter 10 – Qui 12 | Fase 3: piloto (job 1140, 1º da fila; início previsto pelo Slurm: Qui 12, 06h56) | **Decisão: manter a matemática ou trocar de tarefa; tokenizer** |
 | Qua 11 – Sex 13 | Fase 4: pré-treino final (~6h em 2 GPUs ou ~11h em 1 GPU, + fila) | Checkpoint publicado |
 | Sex 13 – Sáb 14 | Fase 5: mid-training M e C | Veredito da matemática |
 | Sáb 14 | Fase 6: SFT | Checkpoint final |
@@ -30,7 +30,7 @@ Revisado em 10/11: a Fase 3 começou com ~2 dias de atraso em relação ao calen
 **Limites para acionar o plano B**
 - **Sem as 2 GPUs livres até Qui 12:** rodar o pré-treino em 1 GPU (~11h), sem esperar a outra.
 - **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados.
-- **Piloto sem resultado até Qua 11 à noite** *(sugestão, a validar com o grupo)*: começar o pré-treino final com o GPT-2 padrão, que já é a escolha default do plano, e decidir a matemática só no mid-training final.
+- **O pré-treino final não depende do piloto:** o tokenizer padrão já é o GPT-2, e a matemática só afeta o mid-training. Ele pode entrar na fila em paralelo ao piloto, pela conta de outro membro do grupo (o limite de 1 job é por usuário).
 
 ---
 
@@ -57,7 +57,7 @@ Revisado em 10/11: a Fase 3 começou com ~2 dias de atraso em relação ao calen
 | Nó `CDIA01` | 2× **RTX A5000 24 GB**, 96 threads (Xeon 5318Y), 251 GB RAM | Único nó com GPU |
 | Fila | Slurm, partição `LAD_geral`, `priority/basic` (FIFO) + backfill, sem preempção; limite de **96h por job** (`max walltime`, exibido no login); **máximo de 1 job por usuário, somando os que rodam e os da fila**; fila compartilhada com outras turmas | Etapas rodam uma de cada vez; não dá para encadear jobs nem preparar dados durante um treino; `--time` realista ajuda o backfill |
 | `/home` | NFS, 1,4 TB livres e compartilhados, mas com **cota de 10 GB por usuário**; escrita de 94 MB/s | Código, logs e resultados; não dataset. O `.venv` ocupa ~6,9 GB da cota |
-| `/scratch` | Disco local de 37 TB, 35 TB livres; escrita de 547 MB/s, leitura de 907 MB/s | Dados e checkpoints em `/scratch/ap211/slm-shared` (ver `DADOS.md`); caches em `/scratch/ap211/slm`; backup desconhecido |
+| `/scratch` | Disco local de 37 TB, 35 TB livres; escrita de 547 MB/s, leitura de 907 MB/s | Dados e checkpoints em `/scratch/ap211/slm-shared` (ver `DADOS.md`); caches por usuário em `/scratch/$USER/slm`; sem backup, e o sistema apaga dados com mais de 6 meses |
 | Rede no nó | HF e PyPI acessíveis | Download direto em job |
 | Python | Ambiente com `uv`: Python 3.12, PyTorch 2.11 (cu128), bf16 e Flash Attention confirmados | `sbatch slurm/setup.sbatch` recria o ambiente |
 
@@ -245,8 +245,8 @@ Rodar o antes/depois em miniatura com o modelo piloto. **Trocar de tarefa só se
 Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mil tokens/s, mais folga). O objetivo é validar o pipeline, não caçar otimizações.
 - [ ] Run base com GPT-2 + antes/depois de matemática em miniatura
   - Configs em `configs/pilot/` e job em `slurm/pilot.sbatch`: pré-treino de 500M tokens → mid M e C de 100M tokens cada → avaliação dos 3 checkpoints → McNemar (M × pré e M × C). Lê os dados de `slm-shared` e grava em `/scratch/$USER/slm`.
-  - *Estimativa* do job completo: ~1,5–2h em 1 GPU (a avaliação ainda não foi medida); limite de 4h, com retomada ao resubmeter.
-  - Job 1140 (`ap205`) na fila desde Ter 10/11, 14h13, aguardando GPU.
+  - *Estimativa* do job completo: ~1h40–2h30 em 1 GPU. A avaliação final não foi medida e pesa mais que o previsto: a geração do GSM8K não usa cache de atenção (`slm/generate.py`). Limite do job: 6h, aumentado com `scontrol update` em 11/11 sem perder a posição na fila.
+  - Job 1140 (`ap205`) na fila desde Ter 10/11, 14h13. Em 11/11 é o 1º da fila; as 2 GPUs estão ocupadas por jobs de outras turmas, e o Slurm prevê o início para Qui 12, 06h56 (teto: fim do limite do job que ocupa a GPU).
 - [ ] Um único teste extra: GPT-2 com dígitos separados. Adotar só se a aritmética melhorar com McNemar p < 0,05
   - Custo maior que as ~10 linhas previstas: o trainer recusa checkpoint e dados com tokenizers diferentes, então o teste exige retokenizar o pré-treino (ou parte dele) e o chat. Decidir depois do run base.
 
@@ -319,7 +319,7 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 
 | Risco | Mitigação |
 |---|---|
-| Fila cheia perto do prazo | Fila compartilhada com outras turmas. Pré-treino até Sex 13; sem 2 GPUs até Qui 12, rodar em 1 GPU. A folga de Qua 18 já foi consumida. O limite de 1 job é por usuário: membros diferentes do grupo podem ter jobs simultâneos |
+| Fila cheia perto do prazo | Fila compartilhada com outras turmas (em 10 e 11/11, as 2 GPUs ficaram ocupadas por ~2 dias). Pré-treino até Sex 13; sem 2 GPUs até Qui 12, rodar em 1 GPU. A folga de Qua 18 já foi consumida. O limite de 1 job é por usuário: membros diferentes do grupo podem ter jobs simultâneos. Um job na fila pode ter o limite de tempo aumentado (`scontrol update`) sem perder a posição |
 | Falta de memória na GPU durante o treino | Batch de 24 (~7 GB de folga); avaliação sem gradiente e com batch menor |
 | Run interrompido | Checkpoints frequentes e retomada testada na Fase 1 |
 | `/scratch` sem backup | Copiar os marcos para `/home` e publicar no HF |

@@ -31,6 +31,8 @@ O diretório fica dentro de `/scratch/ap211/` de propósito: a raiz `/scratch` t
 `/scratch/ap211/slm/` guarda só o que se regenera: `hf-cache` (parquets baixados do FineWeb-Edu, ~25 GB), `uv-cache`, e os dados e `runs` da miniatura (`data/smoke`).
 Os caminhos vêm das variáveis `SLM_SCRATCH` (caches) e `SLM_SHARED` (dados persistentes), definidas nos `.sbatch`.
 
+**Piloto (Fase 3):** só **lê** do diretório compartilhado. Grava os runs em `/scratch/$USER/slm/runs/pilot/{pretrain,mid_m,mid_c}` (checkpoints e `metrics.jsonl`, por usuário), o cache dos benchmarks em `/scratch/$USER/slm/hf-cache` e os resultados em `results/pilot/*.json` no clone. O `slurm/pilot.sbatch` aborta se `SLM_SCRATCH` estiver dentro de `SLM_SHARED`.
+
 ## Formato
 
 Cada conjunto (`train/` e `val/`) é um diretório com:
