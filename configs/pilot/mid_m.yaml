@@ -1,0 +1,13 @@
+# Fase 3 (piloto): mid-training M (75% chat + 25% matematica), em miniatura.
+run_dir: ${SLM_SCRATCH}/runs/pilot/mid_m
+data_dir: ${SLM_SHARED}/data/mid_m/train
+val_dir: ${SLM_SHARED}/data/mid_m/val
+init_from: ${SLM_SCRATCH}/runs/pilot/pretrain/final.pt
+max_tokens: 100000000     # 1/3 dos 300M do run final; ~3.050 steps
+batch_size: 32
+peak_lr: 3.0e-4           # topo da faixa do enunciado (1e-4 a 3e-4)
+warmup_tokens: 5000000
+log_every: 50
+eval_every: 250           # cada avaliacao tambem mede a aritmetica (curva do mid-training)
+eval_batches: 50
+ckpt_every: 1000
