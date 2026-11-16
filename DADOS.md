@@ -34,7 +34,7 @@ Gerados por `sbatch slurm/pretrain.sbatch` (config `configs/final/pretrain.yaml`
 
 | Arquivo | Conteúdo |
 |---|---|
-| `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados. A cada 5.000 steps (~30 min); ficam só os 3 últimos. *Estimativa:* ~1,4 GB cada (fp32) |
+| `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados. A cada 5.000 steps (~30 min); ficam só os 3 últimos. 1.369.545.217 bytes cada (~1,37 GB, medido em 15/11) |
 | `final.pt` | Só os pesos, no fim do treino (~0,5 GB, *estimativa*). Se ele existe, o job não faz nada |
 | `metrics.jsonl` | Uma linha por log ou avaliação: loss, LR, norma do gradiente, tokens/s, `val_loss` e `val_ppl` |
 | `.lock` | Trava (`flock`): impede dois jobs gravando no mesmo diretório. Testada no `/scratch` do CDIA em 11/11 |

@@ -2,7 +2,7 @@
 
 Pipeline: **Pré-treino (FineWeb-Edu) → Mid-training (chat + matemática, com benchmark antes e depois) → SFT → Avaliação & Demo**
 
-Atualizado em 13/11/2026. **Prazo: 19/11/2026** (6 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
+Atualizado em 15/11/2026. **Prazo: 19/11/2026** (4 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
 
 **Decisões fechadas**
 - Modelo de ~114M parâmetros, com 2,5B tokens no pré-treino.
@@ -14,22 +14,22 @@ Atualizado em 13/11/2026. **Prazo: 19/11/2026** (6 dias). Os itens marcados como
 
 ## 1. Calendário
 
-Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação ao calendário original, e a folga de Qua 18 foi absorvida. As datas a partir da Fase 4 dependem da fila de GPU, que é compartilhada com outras turmas. Em 13/11, a previsão do Slurm para o início do pré-treino passou para Sáb 14, 22h57: as datas abaixo são o pior caso e deixam a entrega sem folga.
+Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação ao calendário original, e a folga de Qua 18 foi absorvida. As datas a partir da Fase 4 dependem da fila de GPU, que é compartilhada com outras turmas. Em 13/11, a previsão do Slurm para o início do pré-treino passou para Sáb 14, 22h57: as datas abaixo são o pior caso e deixam a entrega sem folga. O pré-treino começou Dom 15 às 18h32, ~20h depois dessa previsão. As Fases 5 a 8 serão replanejadas quando o grupo definir onde rodar as Fases 5 e 6 (no servidor, só a partir de ~Qua 18; localmente, em avaliação).
 
 | Datas | Etapa | Marco |
 |---|---|---|
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
 | Ter 10 – Qua 11 | Fase 3: piloto ✅ (job 1140, Qua 11, 13h54–15h24) | **Decisão (pendente do grupo): manter a matemática; tokenizer GPT-2** |
-| Qua 11 – Dom 15 | Fase 4: pré-treino final, **2 GPUs obrigatórias** (~5–6h; job com reserva de 36h). Job 1152 na fila desde Qua 11; início previsto pelo Slurm: Sáb 14, 22h57; fim Dom 15, ~04h–11h | Checkpoint publicado |
-| Dom 15 – Seg 16 | Fase 5: mid-training M e C (pior caso, 13/11) | Veredito da matemática |
-| Seg 16 | Fase 6: SFT (pior caso, 13/11) | Checkpoint final |
-| Seg 16 – Ter 17 | Fases 7 e 8: avaliação final e demo (pior caso, 13/11) | Tabelas e demo funcionando |
+| Qua 11 – Seg 16 | Fase 4: pré-treino final em **2 GPUs** (job 1152): início Dom 15, 18h32; fim previsto Seg 16, ~00h30 | Checkpoint publicado |
+| Seg 16 – Qua 18 | Fase 5: mid-training M e C (a replanejar em 15/11: servidor ou local) | Veredito da matemática |
+| Qua 18 | Fase 6: SFT (a replanejar em 15/11) | Checkpoint final |
+| Qua 18 | Fases 7 e 8: avaliação final e demo (a replanejar em 15/11) | Tabelas e demo funcionando |
 | Ter 17 – Qua 18 | Fase 8: README, checkpoints no HF, slides, ensaio | Entrega pronta |
 | Qui 19 | Entrega | |
 
 **Limites para acionar o plano B**
 - **2 GPUs obrigatórias** (decisão do grupo em 11/11; exigência do enunciado): não há plano B em 1 GPU. O `slurm/pretrain.sbatch` aborta se não tiver as duas. Para absorver imprevistos, o job reserva 36h, bem acima da estimativa.
-- **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados. **A rever pelo grupo (13/11):** pela previsão do Slurm, o job só começa Sáb 14 às 22h57, então não haverá nenhum checkpoint nesse prazo.
+- **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados. **A rever pelo grupo (13/11):** pela previsão do Slurm, o job só começa Sáb 14 às 22h57, então não haverá nenhum checkpoint nesse prazo. Superada em 15/11: o pré-treino começou Dom 15 às 18h32.
 - **O pré-treino final não depende do piloto:** o tokenizer padrão já é o GPT-2, e a matemática só afeta o mid-training. Ele pode entrar na fila em paralelo ao piloto, pela conta de outro membro do grupo (o limite de 1 job é por usuário).
 
 ---
@@ -75,7 +75,7 @@ Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação 
 - **Exige `TORCHINDUCTOR_SHAPE_PADDING=0`:** a compilação falhou por falta de memória no run com a opção padrão, em um teste interno de padding.
 - **Quem limita a memória são os logits:** batch × contexto × vocabulário ocupa 6,6 GB em fp32 só para o batch de 32, por causa do vocabulário de 50k.
 - **Batch de 24 por GPU:** praticamente a mesma velocidade do batch de 32, com ~7 GB de folga para fragmentação.
-- **Não medido:** velocidade em 2 GPUs, que será vista no início do pré-treino. As estimativas abaixo supõem ganho quase linear.
+- **Medido em 15/11 (job 1152):** ~122,4 mil tokens/s em 2 GPUs, ~89% de 2 × 69 mil (ganho quase linear, como suposto).
 
 **Job do pré-treino final:** `slurm/pretrain.sbatch` (2 GPUs, 32 CPUs, 96 GB, limite de 36h). Use `--mem` explícito: sem ele, o padrão observado reserva ~128 GB por GPU. Evite `--exclusive`.
 
@@ -272,11 +272,12 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 ### Fase 4: Pré-treino final (~5–6h em 2 GPUs obrigatórias, batch de 24 por GPU)
 - [x] Config e job: `configs/final/pretrain.yaml` e `slurm/pretrain.sbatch`. 1 época (2.497.560.576 tokens), LR 3e-4, warmup de 100M tokens, avaliação a cada 2.500 steps (~15 min), checkpoint a cada 5.000 steps (~30 min). Reserva de 36h
 - [x] Submetido: job 1152 (`ap205`), Qua 11 à tarde, commit `ab19f1a`. Pasta de checkpoints vazia antes da submissão (treino parte do zero)
-- [ ] Início: em 13/11 ~11h o 1152 segue em 1º, mas a previsão do Slurm passou para **Sáb 14, 22h57**: o fim do limite do 1156 (`ap220`, 1 GPU). O 1156 foi submetido em Qui 12 às 22h07, depois do 1152 (Qua 11, 19h45), e começou antes dele, às 22h57; causa não identificada. A outra GPU está ociosa (`GresUsed=gpu:1`), reservada para o 1152. Fim previsto: Dom 15, entre ~04h e ~11h. Enquanto isso, não trocar de branch no clone do `ap205`
+- [x] Início: Dom 15/11 às 18h32 (job 1152), em 2× RTX A5000, ~20h depois da previsão de 13/11 e ~95h depois da submissão. O 1156, submetido depois, começou antes; causa não identificada
+- [ ] Fim previsto: Seg 16, ~00h15–00h30, seguido da avaliação final, do `final.pt` e da cópia dos marcos. Até lá, não trocar de branch no clone do `ap205`
 - [x] Marcos: `keep_last: 3`, e no fim do job o `slurm/pretrain.sbatch` copia o `final.pt` e o `ckpt_000045000.pt` para `checkpoints/pretrain_marcos/`. O decaimento do WSD começa no passo 45.733; o ckpt 45.000 é o último da fase estável e permite refazer o decaimento
-- [ ] Checkpoint a cada ~30 min, mantendo os 3 últimos
+- [x] Checkpoint a cada ~34 min (1,37 GB cada), mantendo os 3 últimos: confirmado em 15/11 (ckpts 15.000, 20.000 e 25.000)
 - [ ] Logar loss e perplexidade de validação (`metrics.jsonl`, junto dos checkpoints); guardar amostras de geração
-- [ ] Na primeira hora: conferir a velocidade em 2 GPUs (nunca medida) e a curva de loss com LR 3e-4
+- [x] Velocidade e curva conferidas em 15/11, após 3h (step 26.600 de 50.813): ~122,4 mil tok/s; val_ppl 59.030 → 53,4 (step 2.500) → 28,5 (10.000) → 23,6 (25.000), sempre caindo e já abaixo do piloto no fim (32,5); norma do gradiente estável (~0,55–0,60). LR 3e-4 sem instabilidade
 - [x] Trava (`flock`) testada no `/scratch` do CDIA em 11/11: um segundo processo é barrado e a trava se solta quando o primeiro termina
 - [ ] Regra do grupo: o pré-treino só roda por `sbatch slurm/pretrain.sbatch`. Rodar `scripts/pretrain.py` direto ignora a trava e pode corromper os checkpoints compartilhados
 - [ ] Amostras de geração, HellaSwag e ARC do checkpoint final: *proposta* de rodar o `evaluate.py` no início do job da Fase 5, sem gastar uma entrada a mais na fila
@@ -284,6 +285,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 **Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF.
 
 ### Fase 5: Mid-training
+- [ ] **Onde rodar as Fases 5 e 6 (15/11, em definição):** no servidor, 3 jobs de 1 GPU com limite de 2 dias (1168, 1171, 1172) estão na frente, então o início seria ~Qua 18. Alternativa: rodar localmente a partir de Seg 16 à noite, numa GPU do grupo. O PC do Guilherme (RTX 4060, 8 GB, ~6,9 GB livres com o vídeo) só comporta batch ~4–6 (*estimativa*), contra 24 no servidor; o grupo procura uma placa com mais memória
 - [ ] Pesos do pré-treino, otimizador zerado, LR 1e-4 a 3e-4, warmup curto, 300M tokens
 - [ ] Rodar M e C em sequência, no mesmo job (limite de 1 job por usuário)
 - [ ] Rodar os testes e aplicar o critério da Seção 6
@@ -344,7 +346,7 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 
 | Risco | Mitigação |
 |---|---|
-| Fila cheia perto do prazo | Fila compartilhada com outras turmas (em 10 e 11/11, as 2 GPUs ficaram ocupadas por ~2 dias). Pré-treino até Sex 13, com **2 GPUs obrigatórias**: o job só começa com as duas livres ao mesmo tempo. Submetido em 11/11 (job 1152, reserva de 36h). Em 12/11, um job submetido depois do 1152 começou antes dele (causa não identificada), adiando a previsão em ~24h. A folga de Qua 18 já foi consumida. O limite de 1 job é por usuário: membros diferentes do grupo podem ter jobs simultâneos. Um job na fila pode ter o limite de tempo aumentado (`scontrol update`) sem perder a posição |
+| Fila cheia perto do prazo | Fila compartilhada com outras turmas (em 10 e 11/11, as 2 GPUs ficaram ocupadas por ~2 dias). Pré-treino até Sex 13, com **2 GPUs obrigatórias**: o job só começa com as duas livres ao mesmo tempo. Submetido em 11/11 (job 1152, reserva de 36h). Em 12/11, um job submetido depois do 1152 começou antes dele (causa não identificada), adiando a previsão em ~24h. A folga de Qua 18 já foi consumida. O limite de 1 job é por usuário: membros diferentes do grupo podem ter jobs simultâneos. Um job na fila pode ter o limite de tempo aumentado (`scontrol update`) sem perder a posição. Em 15/11, com o pré-treino rodando, 3 jobs de 1 GPU (limite de 2 dias) entraram na fila: no servidor, as Fases 5 e 6 só começariam ~Qua 18. Em avaliação: rodar localmente |
 | Falta de memória na GPU durante o treino | Batch de 24 (~7 GB de folga); avaliação sem gradiente e com batch menor |
 | Run interrompido | Checkpoints frequentes e retomada testada na Fase 1 |
 | LR alta para o nosso batch (pré-treino instável) | 3e-4 é metade do valor do GPT-3 Small; curva de loss conferida na primeira hora; o trainer aborta em loss não finita. Se divergir: reduzir a LR e recomeçar |
