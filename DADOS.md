@@ -36,7 +36,7 @@ Gerados por `sbatch slurm/pretrain.sbatch` (config `configs/final/pretrain.yaml`
 | Arquivo | Conteúdo |
 |---|---|
 | `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados. A cada 5.000 steps (~30 min); ficam só os 3 últimos. 1.369.545.217 bytes cada (~1,37 GB, medido em 15/11) |
-| `final.pt` | Só os pesos, no fim do treino (~0,5 GB, *estimativa*). Se ele existe, o job não faz nada |
+| `final.pt` | Só os pesos, no fim do treino: 456.503.035 bytes (~0,46 GB, gerado em 16/11). Se ele existe, o job não faz nada |
 | `metrics.jsonl` | Uma linha por log ou avaliação: loss, LR, norma do gradiente, tokens/s, `val_loss` e `val_ppl` |
 | `.lock` | Trava (`flock`): impede dois jobs gravando no mesmo diretório. Testada no `/scratch` do CDIA em 11/11 |
 
@@ -56,7 +56,7 @@ Gerados por `sbatch slurm/mid_c.sbatch` (config `configs/final/mid_c.yaml`) em `
 | Arquivo | Conteúdo |
 |---|---|
 | `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados, a cada 2.500 steps (~15 min); ficam os 2 últimos. ~1,37 GB cada (mesmo modelo do pré-treino) |
-| `final.pt` | Pesos no fim (passo 14.669; ~0,46 GB, *estimativa*). Se ele existe, o job não faz nada |
+| `final.pt` | Pesos no fim (passo 14.669; ~0,46 GB, o mesmo tamanho do `final.pt` do pré-treino). Se ele existe, o job não faz nada |
 | `metrics.jsonl` | Loss, LR, norma do gradiente e tokens/s; a cada 1.500 steps, também `val_loss`, `val_ppl` e a aritmética (`arith_acc` e uma coluna por célula), que formam a curva do mid |
 | `.lock` | Trava (`flock`) do job |
 
