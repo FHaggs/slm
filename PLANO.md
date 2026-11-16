@@ -9,6 +9,12 @@ Atualizado em 15/11/2026. **Prazo: 19/11/2026** (4 dias). Os itens marcados como
 - Benchmark simples de matemática, rodado antes e depois do mid-training.
 - Uso de IA no código é permitido; código de terceiros adaptado continua precisando de crédito.
 - **Princípio:** nada complicado entra sem evidência de que funciona. Começamos pelo simples, e cada adição precisa de um teste.
+- **(15/11) Fases 5 e 6 divididas:** mid-training C (controle) no servidor, por `slurm/mid_c.sbatch`, submetido pela conta de outro membro do grupo; mid-training M e SFT localmente, numa RTX 4060 (8 GB) de um membro, a partir de Seg 16 à noite. Motivo: no servidor, 3 jobs de 1 GPU com limite de 2 dias estavam na frente (início só ~Qua 18).
+- **(15/11) C mantido como grupo de controle:** separa o efeito da matemática do efeito do formato de chat. No piloto, foi o C que mostrou que parte do ganho no GSM8K era formato e que a queda no ARC-Easy vinha do chat. Continua sendo o primeiro corte se faltar tempo.
+- **(15/11) Acúmulo de gradiente no M local:** micro-lotes somados até 24 registros por passo, com a loss ponderada pelos tokens válidos do passo inteiro (não pela média de cada micro-lote, que distorce com padding e máscara). Assim o M local tem o mesmo batch efetivo, LR, schedule e ordem de dados do C no servidor. Só entra depois dos testes de equivalência em CPU (Fase 5).
+- **(15/11) Avaliação dos 4 modelos (pré, M, C e SFT) numa única máquina**, no fim, para a comparação (McNemar) não misturar GPUs.
+- **(15/11) Branches:** `midtraining-c` sai da `pre-treino` (um PR só para pré-treino e C); `midtraining-m` sai da `midtraining-c`. A `mid-sft` fica parada, para ser reaproveitada no SFT.
+- **(15/11) GPUs alternativas avaliadas e descartadas:** RX 7800 XT de 16 GB (ROCm só tem suporte no Linux; no Windows, a AMD declara que não há suporte a treino), RTX 3050 e RTX 2060 Super (8 GB ou menos; a 2060 Super não tem bf16).
 
 ---
 
@@ -21,9 +27,9 @@ Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação 
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
 | Ter 10 – Qua 11 | Fase 3: piloto ✅ (job 1140, Qua 11, 13h54–15h24) | **Decisão (pendente do grupo): manter a matemática; tokenizer GPT-2** |
 | Qua 11 – Seg 16 | Fase 4: pré-treino final em **2 GPUs** (job 1152): início Dom 15, 18h32; fim previsto Seg 16, ~00h30 | Checkpoint publicado |
-| Seg 16 – Qua 18 | Fase 5: mid-training M e C (a replanejar em 15/11: servidor ou local) | Veredito da matemática |
-| Qua 18 | Fase 6: SFT (a replanejar em 15/11) | Checkpoint final |
-| Qua 18 | Fases 7 e 8: avaliação final e demo (a replanejar em 15/11) | Tabelas e demo funcionando |
+| Seg 16 – Qua 18 | Fase 5: mid-training. **C no servidor** (`slurm/mid_c.sbatch`, na fila; pior caso de início ~Qua 18, 00h30) e **M local** (RTX 4060 com acúmulo de gradiente, a partir de Seg 16 à noite) | Veredito da matemática |
+| Ter 17 | Fase 6: SFT local, a partir de M, na sequência do M | Checkpoint final |
+| Qua 18 | Fase 7: avaliação dos 4 modelos numa só máquina; Fase 8: demo | Tabelas e demo funcionando |
 | Ter 17 – Qua 18 | Fase 8: README, checkpoints no HF, slides, ensaio | Entrega pronta |
 | Qui 19 | Entrega | |
 
@@ -285,11 +291,49 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 **Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF.
 
 ### Fase 5: Mid-training
-- [ ] **Onde rodar as Fases 5 e 6 (15/11, em definição):** no servidor, 3 jobs de 1 GPU com limite de 2 dias (1168, 1171, 1172) estão na frente, então o início seria ~Qua 18. Alternativa: rodar localmente a partir de Seg 16 à noite, numa GPU do grupo. O PC do Guilherme (RTX 4060, 8 GB, ~6,9 GB livres com o vídeo) só comporta batch ~4–6 (*estimativa*), contra 24 no servidor; o grupo procura uma placa com mais memória
-- [ ] Pesos do pré-treino, otimizador zerado, LR 1e-4 a 3e-4, warmup curto, 300M tokens
-- [ ] Rodar M e C em sequência, no mesmo job (limite de 1 job por usuário)
+- [x] **Onde rodar (decidido em 15/11):** C no servidor; M e SFT localmente, com acúmulo de gradiente. Ver Decisões fechadas
+- [x] C: config `configs/final/mid_c.yaml` (pesos do pré-treino final, otimizador zerado, LR 3e-4, warmup de 10M tokens, 1 época = 14.669 steps, ~292M tokens úteis; aritmética a cada 1.500 steps) e job `slurm/mid_c.sbatch` (1 GPU, limite de 6h, só treino; aborta sem o `pretrain/final.pt`; trava própria)
+- [ ] C: submeter pela conta de outro membro do grupo (instruções abaixo)
+- [ ] M: mesmos hiperparâmetros do C, localmente, com acúmulo de gradiente (branch `midtraining-m`). Antes do run: testes de equivalência em CPU (um passo com 24 registros de uma vez igual a 6 micro-lotes de 4; padding e máscara desiguais entre micro-lotes; treino curto inteiro; retomada; os 44 testes atuais sem mudança), benchmark local para escolher o micro-lote e ~50 passos reais conferindo a primeira `val_loss`
 - [ ] Rodar os testes e aplicar o critério da Seção 6
 - [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242); no piloto, de 32,4 para 61,4 (M) e 56,4 (C)
+
+#### Como rodar o mid-training C no servidor (qualquer membro do grupo)
+
+Pré-requisitos: acesso ao CDIA com o **seu próprio usuário** e nenhum outro job seu na fila (o limite é 1 job por usuário). O pré-treino final pode ainda estar na fila ou rodando: enquanto ele ocupa as 2 GPUs, o C não começa; e, se o pré-treino falhar, o C aborta sozinho na partida, porque confere o `checkpoints/pretrain/final.pt`.
+
+1. No nó de login, clonar o repositório do grupo numa pasta nova e entrar na branch do C:
+   ```bash
+   git clone <URL do repositório> ~/slm-c
+   cd ~/slm-c && git checkout midtraining-c && mkdir -p logs
+   ```
+   A pasta `logs/` não vem no clone, e sem ela o Slurm não grava o log do job.
+2. Instalar o `uv` só para o seu usuário, se ainda não tiver:
+   ```bash
+   python3 -m pip install --user uv
+   ```
+3. Criar o ambiente Python (job só de CPU, ~5 min) e esperar ele terminar:
+   ```bash
+   sbatch slurm/setup.sbatch
+   squeue -u $USER                    # repetir até a lista ficar vazia
+   tail -n 3 logs/slm-setup.*.out     # a última linha deve ser "torch ... | cuda build 12.8"
+   ```
+4. Submeter o C (só depois do setup, por causa do limite de 1 job):
+   ```bash
+   sbatch slurm/mid_c.sbatch
+   squeue -u $USER                    # PD = na fila; R = rodando
+   ```
+5. Quando estiver rodando, conferir o início do log:
+   ```bash
+   tail -n 20 logs/slm-mid-c.*.out
+   ```
+   Esperado: `pesos iniciais de .../pretrain/final.pt; otimizador zerado`, `params=114.1M | gpus=1 | batch=24`, e linhas `step ... | loss ... | tok/s` a ~65–69 mil tok/s (*estimativa*). A cada 1.500 steps, uma linha com `val_loss` e `arith_acc`. Duração estimada: ~1,5–3h.
+
+Cuidados:
+- Enquanto o job estiver na fila ou rodando, **não trocar de branch nem fazer `git pull` nesse clone**: o job lê o código e a config da pasta no momento em que começa.
+- Rodar só pelo `sbatch`: `scripts/midtrain.py` direto ignora a trava (`.lock`) e pode corromper os checkpoints compartilhados.
+- Se o job cair ou estourar o limite, basta resubmeter o mesmo `sbatch`: ele retoma do último checkpoint. Se o `final.pt` do C já existir, o job não faz nada.
+- Avisar o grupo ao submeter e ao terminar. O resultado fica em `checkpoints/mid_c/final.pt`, no diretório compartilhado (ver `DADOS.md`).
 
 **Saída:** veredito e checkpoint publicado.
 
@@ -300,7 +344,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 **Saída:** para as mesmas perguntas, respostas melhores que no mid, com parada correta.
 
 ### Fase 7: Avaliação final
-- [ ] Em pré, C, M e SFT: perplexidade, HellaSwag, ARC-Easy (múltiplos benchmarks são diferencial), aritmética e GSM8K
+- [ ] Em pré, C, M e SFT: perplexidade, HellaSwag, ARC-Easy (múltiplos benchmarks são diferencial), aritmética e GSM8K. Os 4 avaliados na mesma máquina local (decisão de 15/11), com o `mid_c/final.pt` copiado do servidor
 - [ ] Comparar antes e depois do SFT nas mesmas perguntas
 - [ ] Gerar tabelas e gráficos a partir de `results/*.json`
 
@@ -353,6 +397,8 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 | `/scratch` sem backup | Marcos copiados para `checkpoints/pretrain_marcos/` no fim do job (protege do `keep_last`, não de falha do disco). Publicar o `final.pt` no HF logo depois do treino |
 | Matemática sem efeito | Piloto (11/11): efeito significativo na aritmética (M × pré p = 0,0003; M × C p = 0,006), concentrado em 1 dígito. Tarefa reserva mantida; resultado negativo reportado com IC |
 | Mid-training piora o conhecimento geral | No piloto, o ARC-Easy caiu ~9 pp e a perplexidade no FineWeb quase dobrou após o mid (M e C). Medir no modelo final e discutir nos slides |
+| Acúmulo de gradiente com erro sutil (M diferente do C sem ninguém perceber) | Loss ponderada pelos tokens válidos do passo; testes de equivalência em CPU antes do run; primeira `val_loss` do M conferida |
+| Máquina local desligar ou reiniciar durante o M ou o SFT | Retomada pelo último checkpoint; desligar suspensão e atualizações automáticas antes de começar |
 | Geração em CPU lenta na demo | Medir com antecedência; vídeo de reserva |
 
 ---

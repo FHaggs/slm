@@ -1,0 +1,14 @@
+# Fase 5: mid-training C (controle: so chat), no servidor (slurm/mid_c.sbatch).
+# Parte do pre-treino final, com o otimizador zerado. M usa os mesmos hiperparametros (branch midtraining-m).
+run_dir: ${SLM_SHARED}/checkpoints/mid_c
+data_dir: ${SLM_SHARED}/data/mid_c/train
+val_dir: ${SLM_SHARED}/data/mid_c/val
+init_from: ${SLM_SHARED}/checkpoints/pretrain/final.pt
+epochs: 1.0               # 352.035 registros = 14.669 steps; cada conversa uma vez (~292M tokens uteis)
+batch_size: 24            # mesmo do pre-treino (17,4 GB no benchmark)
+peak_lr: 3.0e-4           # topo da faixa do enunciado (1e-4 a 3e-4); mesmo valor do piloto
+warmup_tokens: 10000000   # ~400 steps
+log_every: 100
+eval_every: 1500          # ~10 avaliacoes; cada uma mede tambem a aritmetica (curva do mid)
+eval_batches: 50
+ckpt_every: 2500          # ~15 min

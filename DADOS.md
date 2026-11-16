@@ -13,7 +13,8 @@ Dados e checkpoints **nunca vão para o Git**. Ficam no `/scratch` do cluster CD
 │   └── sft/{train,val}/          # SFT: chat + matemática (~100M tokens)
 ├── checkpoints/                  # pesos e estado do otimizador de cada etapa
 │   ├── pretrain/                 # pré-treino final: ckpt_*.pt, final.pt, metrics.jsonl, .lock
-│   └── pretrain_marcos/          # cópias permanentes: final.pt e ckpt_000045000.pt
+│   ├── pretrain_marcos/          # cópias permanentes: final.pt e ckpt_000045000.pt
+│   └── mid_c/                    # mid-training C (servidor): ckpt_*.pt, final.pt, metrics.jsonl, .lock
 └── runs/                         # logs de treino e amostras de geração
 ```
 
@@ -47,6 +48,21 @@ Gerados por `sbatch slurm/pretrain.sbatch` (config `configs/final/pretrain.yaml`
 - **Os marcos não protegem de falha do disco:** o `/scratch` não tem backup. Publicar o `final.pt` no HF logo depois do treino.
 - **Regra do grupo:** o pré-treino só roda por `sbatch slurm/pretrain.sbatch`. Rodar `scripts/pretrain.py` direto ignora a trava.
 - O log do Slurm fica em `logs/` do clone de quem submeteu; o cache do Triton, em `/scratch/$USER/slm/triton-cache`.
+
+## Checkpoints do mid-training C
+
+Gerados por `sbatch slurm/mid_c.sbatch` (config `configs/final/mid_c.yaml`) em `checkpoints/mid_c/`, em 1 GPU do servidor:
+
+| Arquivo | Conteúdo |
+|---|---|
+| `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados, a cada 2.500 steps (~15 min); ficam os 2 últimos. ~1,37 GB cada (mesmo modelo do pré-treino) |
+| `final.pt` | Pesos no fim (passo 14.669; ~0,46 GB, *estimativa*). Se ele existe, o job não faz nada |
+| `metrics.jsonl` | Loss, LR, norma do gradiente e tokens/s; a cada 1.500 steps, também `val_loss`, `val_ppl` e a aritmética (`arith_acc` e uma coluna por célula), que formam a curva do mid |
+| `.lock` | Trava (`flock`) do job |
+
+- **1 época:** o último lote completa o batch com 21 registros da época seguinte (menos de 0,01%).
+- **Retomada:** qualquer membro resubmete o mesmo `sbatch` pela própria conta.
+- **M e SFT não ficam aqui:** rodam localmente (decisão de 15/11), e os checkpoints ficam na máquina local. Para a avaliação final, o `mid_c/final.pt` é copiado para essa máquina.
 
 ## Fora do diretório compartilhado
 
