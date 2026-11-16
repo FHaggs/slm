@@ -8,3 +8,4 @@ data/
 *.bin
 *.safetensors
 .DS_Store
+configs/local/_auto/

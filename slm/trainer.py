@@ -1,5 +1,6 @@
 """Laco de treino comum as tres etapas: DDP, bf16, WSD, grad clip, checkpoints e retomada."""
 
+import contextlib
 import json
 import math
 import os
@@ -33,6 +34,9 @@ class TrainConfig:
     max_tokens: int | None = None
     epochs: float | None = None  # alternativa a max_tokens
     batch_size: int = 24  # por GPU
+    # Acumulo de gradiente: cada passo soma grad_accum micro-lotes de batch_size registros por GPU.
+    # O passo equivale a um lote unico de batch_size * grad_accum (mesmos registros, mesma ordem).
+    grad_accum: int = 1
     peak_lr: float = 3e-4
     warmup_tokens: int = 100_000_000
     decay_frac: float = 0.1
@@ -82,6 +86,36 @@ def _periodic_checkpoints(run_dir: Path) -> list[Path]:
     return sorted(run_dir.glob("ckpt_*.pt"))
 
 
+def _accumulated_step(net, train_data, sampler, records_seen, cfg, rank, world, device, use_cuda) -> torch.Tensor:
+    """Um passo com grad_accum micro-lotes. Retorna a loss media do passo (por token valido).
+
+    O modelo devolve a media da loss por micro-lote; somar essas medias distorceria o passo quando
+    os micro-lotes tem quantidades diferentes de tokens validos (padding e mascara do SFT). Aqui a
+    loss de cada micro-lote e somada por token e dividida pelo total de tokens validos do passo,
+    entao o gradiente e o mesmo de um lote unico de batch_size * grad_accum.
+    """
+    micro = []
+    for k in range(cfg.grad_accum):
+        start = records_seen + k * cfg.batch_size * world + rank
+        micro.append(train_data.batch(sampler.indices(start, cfg.batch_size, stride=world)))
+    valid = max(sum(int((targets != -100).sum()) for _, targets in micro), 1)
+    total = torch.zeros((), device=device)
+    for k, (inputs, targets) in enumerate(micro):
+        inputs = torch.from_numpy(inputs).to(device, non_blocking=True)
+        targets = torch.from_numpy(targets).to(device, non_blocking=True)
+        last = k == len(micro) - 1
+        sync = net.no_sync() if world > 1 and not last else contextlib.nullcontext()
+        with sync:
+            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_cuda):
+                logits, _ = net(inputs)
+                loss_sum = F.cross_entropy(
+                    logits.reshape(-1, logits.size(-1)), targets.reshape(-1), ignore_index=-100, reduction="sum"
+                )
+            (loss_sum / valid).backward()
+        total += loss_sum.detach()
+    return total / valid
+
+
 def _truncate_metrics(path: Path, step: int) -> None:
     """Depois de uma queda, descarta o que foi registrado alem do checkpoint usado na retomada."""
     if not path.exists():
@@ -125,6 +159,8 @@ def train(
     """Treina ate o fim ou ate o limite de tempo. Retorna "finished" ou "interrupted"."""
     world = int(os.environ.get("WORLD_SIZE", 1))
     rank = int(os.environ.get("RANK", 0))
+    if cfg.grad_accum < 1:
+        raise ValueError("grad_accum deve ser >= 1")
     use_cuda = torch.cuda.is_available()
     if world > 1:
         dist.init_process_group("nccl" if use_cuda else "gloo")
@@ -212,6 +248,8 @@ def train(
     log(
         f"params={model.num_params() / 1e6:.1f}M | gpus={world} | batch={cfg.batch_size} | "
         f"seq_len={seq_len} | registros={len(train_data):,} | meta={total_tokens:,} tokens"
+        + (f" | acumulo={cfg.grad_accum} (lote efetivo {cfg.batch_size * cfg.grad_accum * world})"
+           if cfg.grad_accum > 1 else "")
     )
 
     sampler = EpochSampler(len(train_data), cfg.seed)
@@ -261,20 +299,22 @@ def train(
         for group in optimizer.param_groups:
             group["lr"] = lr
 
-        indices = sampler.indices(records_seen + rank, cfg.batch_size, stride=world)
-        inputs, targets = train_data.batch(indices)
-        inputs = torch.from_numpy(inputs).to(device, non_blocking=True)
-        targets = torch.from_numpy(targets).to(device, non_blocking=True)
-
         optimizer.zero_grad(set_to_none=True)
-        with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_cuda):
-            _, loss = net(inputs, targets)
-        loss.backward()
+        if cfg.grad_accum == 1:
+            indices = sampler.indices(records_seen + rank, cfg.batch_size, stride=world)
+            inputs, targets = train_data.batch(indices)
+            inputs = torch.from_numpy(inputs).to(device, non_blocking=True)
+            targets = torch.from_numpy(targets).to(device, non_blocking=True)
+            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_cuda):
+                _, loss = net(inputs, targets)
+            loss.backward()
+        else:
+            loss = _accumulated_step(net, train_data, sampler, records_seen, cfg, rank, world, device, use_cuda)
         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
         optimizer.step()
 
         step += 1
-        records_seen += cfg.batch_size * world
+        records_seen += cfg.batch_size * world * cfg.grad_accum
         window_loss += loss.detach()
         window_steps += 1
 

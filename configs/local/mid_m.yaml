@@ -1,0 +1,21 @@
+# Fase 5 (local): mid-training M numa GPU de 8 GB (RTX 4060), com acumulo de gradiente.
+# Mesmos hiperparametros do C no servidor (configs/final/mid_c.yaml): lote efetivo de 24 registros,
+# LR 3e-4, warmup de 10M tokens, 1 epoca, e as mesmas 800 conversas de validacao (eval 4 x 200).
+# batch_size e grad_accum sao escolhidos pelo scripts/run_local.py conforme a memoria livre
+# (sempre batch_size x grad_accum = 24). Sem torch.compile: sem suporte oficial no Windows.
+run_dir: ${SLM_SHARED}/checkpoints/mid_m
+data_dir: ${SLM_SHARED}/data/mid_m/train
+val_dir: ${SLM_SHARED}/data/mid_m/val
+init_from: ${SLM_SHARED}/checkpoints/pretrain/final.pt
+epochs: 1.0               # 365.386 registros = 15.225 steps (~294M tokens uteis)
+batch_size: 4             # micro-lote (sobrescrito pelo run_local.py)
+grad_accum: 6             # 4 x 6 = 24 (sobrescrito pelo run_local.py)
+peak_lr: 3.0e-4
+warmup_tokens: 10000000
+log_every: 100
+eval_every: 1500          # aritmetica a cada avaliacao (curva do mid)
+eval_batches: 200         # 200 x 4 = 800 registros, os mesmos do C no servidor (50 x 16)
+eval_batch_size: 4
+ckpt_every: 1000          # ~30-45 min locais entre checkpoints (estimativa)
+keep_last: 2
+compile: false

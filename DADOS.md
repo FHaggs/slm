@@ -64,6 +64,20 @@ Gerados por `sbatch slurm/mid_c.sbatch` (config `configs/final/mid_c.yaml`) em `
 - **Retomada:** qualquer membro resubmete o mesmo `sbatch` pela própria conta.
 - **M e SFT não ficam aqui:** rodam localmente (decisão de 15/11), e os checkpoints ficam na máquina local. Para a avaliação final, o `mid_c/final.pt` é copiado para essa máquina.
 
+## Cópia local (M e SFT)
+
+Em 16/11, um arquivo `.tar` de 2.443.468.800 bytes foi gerado no servidor e baixado para a máquina local (SHA-256 conferido nos dois lados). Conteúdo, com a mesma estrutura do diretório compartilhado:
+
+| Caminho | Uso |
+|---|---|
+| `data/mid_m/{train,val}` (sem `mask.bin`) | Mid-training M (não usa máscara) |
+| `data/mid_c/{train,val}` (sem `mask.bin`) | Reserva, caso o C também precise rodar localmente |
+| `data/sft/{train,val}` (com `mask.bin`) | SFT |
+| `data/pretrain/val` | Perplexidade no FineWeb, nas avaliações |
+| `checkpoints/pretrain/final.pt` e `metrics.jsonl` | Ponto de partida do M; curva do pré-treino para os gráficos |
+
+Localmente, o `scripts/run_local.py` grava em `shared/checkpoints/{mid_m,sft}` (mantendo os 2 últimos checkpoints periódicos), os resultados em `results/final/*.json` no clone e os logs em `logs/local_run.log` e `logs/local_status.txt`. A pasta irmã `local-cache/` guarda o cache dos benchmarks.
+
 ## Fora do diretório compartilhado
 
 `/scratch/ap211/slm/` guarda só o que se regenera: `hf-cache` (parquets baixados do FineWeb-Edu, ~25 GB), `uv-cache`, e os dados e `runs` da miniatura (`data/smoke`).
