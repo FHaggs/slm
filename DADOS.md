@@ -56,7 +56,7 @@ Gerados por `sbatch slurm/mid_c.sbatch` (config `configs/final/mid_c.yaml`) em `
 | Arquivo | Conteúdo |
 |---|---|
 | `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados, a cada 2.500 steps (~15 min); ficam os 2 últimos. ~1,37 GB cada (mesmo modelo do pré-treino) |
-| `final.pt` | Pesos no fim (passo 14.669; ~0,46 GB, o mesmo tamanho do `final.pt` do pré-treino). Se ele existe, o job não faz nada |
+| `final.pt` | Pesos no fim (passo 14.669): 456.503.035 bytes, gerado em 16/11 (job 1173). Se ele existe, o job não faz nada |
 | `metrics.jsonl` | Loss, LR, norma do gradiente e tokens/s; a cada 1.500 steps, também `val_loss`, `val_ppl` e a aritmética (`arith_acc` e uma coluna por célula), que formam a curva do mid |
 | `.lock` | Trava (`flock`) do job |
 

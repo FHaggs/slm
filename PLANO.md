@@ -15,6 +15,7 @@ Atualizado em 16/11/2026. **Prazo: 19/11/2026** (3 dias). Os itens marcados como
 - **(15/11) Avaliação dos 4 modelos (pré, M, C e SFT) numa única máquina**, no fim, para a comparação (McNemar) não misturar GPUs.
 - **(15/11) Branches:** `midtraining-c` sai da `pre-treino` (um PR só para pré-treino e C); `midtraining-m` sai da `midtraining-c`. A `mid-sft` fica parada, para ser reaproveitada no SFT.
 - **(15/11) GPUs alternativas avaliadas e descartadas:** RX 7800 XT de 16 GB (ROCm só tem suporte no Linux; no Windows, a AMD declara que não há suporte a treino), RTX 3050 e RTX 2060 Super (8 GB ou menos; a 2060 Super não tem bf16).
+- **(16/11) M e SFT também no servidor:** com o C pronto e uma GPU aparentemente livre, foi submetido o `slurm/mid_sft.sbatch` (branch `mid-sft`, job 1175): avaliação do pré-treino → M → C (pulado, já existe) → SFT → avaliações de M, C e SFT → McNemar, tudo em 1 GPU, lote 24 sem acúmulo. O M local (RTX 4060, com acúmulo) continua como reserva e como teste do acúmulo de gradiente. *Proposta (a decidir):* o M e o SFT do servidor como oficiais, por terem a mesma GPU, o mesmo lote e o mesmo ambiente do C.
 
 ---
 
@@ -27,7 +28,7 @@ Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação 
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
 | Ter 10 – Qua 11 | Fase 3: piloto ✅ (job 1140, Qua 11, 13h54–15h24) | **Decisão (pendente do grupo): manter a matemática; tokenizer GPT-2** |
 | Qua 11 – Seg 16 | Fase 4: pré-treino final em **2 GPUs** (job 1152) ✅: Dom 15, 18h32 → Seg 16, 00h16 (5h44); val_ppl final 18,8 | Checkpoint publicado |
-| Seg 16 – Qua 18 | Fase 5: mid-training. **C no servidor** (job 1173, na fila desde Seg 16 ~00h40; pior caso de início Qua 18, ~00h16) e **M local** (RTX 4060 com acúmulo de gradiente, a partir de Seg 16 à noite) | Veredito da matemática |
+| Seg 16 – Qua 18 | Fase 5: mid-training. **C no servidor** (job 1173 ✅: Seg 16, 10h28–11h58, 1h30) e **M local** (RTX 4060 com acúmulo de gradiente, a partir de Seg 16 à noite) | Veredito da matemática |
 | Ter 17 | Fase 6: SFT local, a partir de M, na sequência do M | Checkpoint final |
 | Qua 18 | Fase 7: avaliação dos 4 modelos numa só máquina; Fase 8: demo | Tabelas e demo funcionando |
 | Ter 17 – Qua 18 | Fase 8: README, checkpoints no HF, slides, ensaio | Entrega pronta |
@@ -294,7 +295,9 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [x] **Onde rodar (decidido em 15/11):** C no servidor; M e SFT localmente, com acúmulo de gradiente. Ver Decisões fechadas
 - [x] C: config `configs/final/mid_c.yaml` (pesos do pré-treino final, otimizador zerado, LR 3e-4, warmup de 10M tokens, 1 época = 14.669 steps, ~292M tokens úteis; aritmética a cada 1.500 steps) e job `slurm/mid_c.sbatch` (1 GPU, limite de 6h, só treino; aborta sem o `pretrain/final.pt`; trava própria)
 - [x] C: submetido pelo `ap205` em Seg 16 ~00h40 (job 1173, branch `midtraining-c`), assim que o pré-treino liberou a vaga. 2º na fila de GPU, atrás do 1172 (1 GPU, 2 dias); as 2 GPUs estão com jobs de 2 dias iniciados Seg 16 ~00h16. Pior caso de início: Qua 18 ~00h16; fim ~Qua 18 ~03h (*estimativa*)
-- [ ] *Proposta (16/11, a decidir):* se o 1173 não tiver começado quando o M e o SFT locais terminarem, rodar o C também localmente (mesma máquina e mesmo acúmulo) e usar o que terminar primeiro, cancelando o outro
+- [x] **C concluído** (job 1173, `COMPLETED`, exit 0): Seg 16, das 10h28 às 11h58 (1h30; estimativa: 1,5–3h), a ~68,8 mil tok/s. 14.669 steps. Perplexidade na validação do chat: 22,8 → **4,86** (o decaimento final baixou de 5,47 para 4,86). Aritmética: 0,81% → **1,17%**, oscilando entre 0,99% e 2,44% ao longo do treino, sem tendência (no piloto, C terminou em 1,3%). Células finais: soma de 1 dígito 4,9%, multiplicação de 1 dígito 9,9%, 2 dígitos ~0
+- [x] Mesma avaliação em GPUs diferentes: o `step 0` do C (servidor) e o do M local medem o mesmo modelo (o pré-treino). `val_loss` idêntica (3,1256), mas a aritmética deu 0,81% no servidor e 0,72% localmente (1 item de 1.107). Reforça a decisão de avaliar os 4 modelos na mesma máquina
+- [ ] M e SFT no servidor: job 1175 (`slurm/mid_sft.sbatch`), submetido Seg 16 à tarde; na fila (Resources), com o nó mostrando as 2 GPUs em uso
 - [x] M: acúmulo de gradiente implementado em `slm/trainer.py` (`grad_accum`, padrão 1 = caminho anterior, sem mudança). Cada passo soma `grad_accum` micro-lotes, com a loss somada por token e dividida pelos tokens válidos do passo inteiro
 - [x] Testes de equivalência em CPU (`tests/test_grad_accum.py`, **6 de 6 passando** em 16/11): um passo com 24 registros = 6 micro-lotes de 4 (loss e gradientes), também com padding e máscara desiguais entre micro-lotes; controle mostrando que a média simples por micro-lote **não** bate; treino curto inteiro (pesos finais, curva e validação iguais); retomada com acúmulo; valor inválido recusado
 - [x] Testes antigos no notebook (Windows, CPU): 48 de 50 passando. Os 2 que falham **falham igual no código original** (falta o `streamlit` no ambiente de teste; o teste de 2 processos não abre a conexão local no Windows). Não têm relação com o acúmulo; no servidor (Linux) os 44 passavam
