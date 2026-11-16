@@ -301,7 +301,8 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [x] Configs locais (`configs/local/mid_m.yaml` e `sft.yaml`): mesmos hiperparâmetros do servidor, lote efetivo de 24, sem `torch.compile` (sem suporte oficial no Windows) e a mesma validação de 800 registros do C. O micro-lote é escolhido pelo `scripts/run_local.py` conforme a memória livre
 - [x] `scripts/evaluate.py`: opções `--ppl-batch-size` e `--gsm-batch-size` (padrões iguais aos do servidor), para a avaliação caber em 8 GB
 - [x] Dados transferidos para o PC local em 16/11 (2,44 GB, SHA-256 idêntico nos dois lados)
-- [ ] M e SFT locais: rodar `scripts/run_local.py` (instruções abaixo). *Estimativa:* ~10–15h de execução na RTX 4060, a confirmar pela medição do `--check`
+- [x] Checagem local (16/11, 02h06): dados ok, 394 GB livres, RTX 4060 com 6,9 de 8,0 GiB livres, bf16 ok. Medição dos micro-lotes: 8 e 6 passaram da memória física (10,86 e 9,22 GiB) e o Windows usou a RAM sem erro, ficando ~6–8x mais lentos (2,2 e 2,8 mil tok/s); 4 ficou no limite (6,85 GiB, 12,2 mil); **3 escolhido** (5,09 GiB, 18,0 mil tok/s; 3 × 8 = 24); 2 e 1 cabem, mais lentos
+- [ ] **M local em execução** desde Seg 16 às 02h29. `step 0`: val_loss 3,1256 (val_ppl 22,8) no chat de M, abaixo do piloto (3,72); aritmética 0,7% (ponto de partida da curva). `step 100`: loss 2,48, norma do gradiente 1,25, **16,5 mil tok/s** (medido). Previsão: M até ~08h50, SFT até ~11h, avaliações até ~13h–15h (*estimativa*)
 - [ ] Rodar os testes e aplicar o critério da Seção 6
 - [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242); no piloto, de 32,4 para 61,4 (M) e 56,4 (C)
 
