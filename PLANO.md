@@ -2,34 +2,40 @@
 
 Pipeline: **Pré-treino (FineWeb-Edu) → Mid-training (chat + matemática, com benchmark antes e depois) → SFT → Avaliação & Demo**
 
-Atualizado em 11/11/2026. **Prazo: 19/11/2026** (8 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
+Atualizado em 16/11/2026. **Prazo: 19/11/2026** (3 dias). Os itens marcados como *estimativa* são validados na Fase 0 ou na Fase 3.
 
 **Decisões fechadas**
 - Modelo de ~114M parâmetros, com 2,5B tokens no pré-treino.
 - Benchmark simples de matemática, rodado antes e depois do mid-training.
 - Uso de IA no código é permitido; código de terceiros adaptado continua precisando de crédito.
 - **Princípio:** nada complicado entra sem evidência de que funciona. Começamos pelo simples, e cada adição precisa de um teste.
+- **(15/11) Fases 5 e 6 divididas:** mid-training C (controle) no servidor, por `slurm/mid_c.sbatch` (submetido pelo `ap205` em Seg 16, job 1173, assim que o pré-treino liberou a vaga); mid-training M e SFT localmente, numa RTX 4060 (8 GB) de um membro, a partir de Seg 16 à noite. Motivo: no servidor, 3 jobs de 1 GPU com limite de 2 dias estavam na frente (início só ~Qua 18).
+- **(15/11) C mantido como grupo de controle:** separa o efeito da matemática do efeito do formato de chat. No piloto, foi o C que mostrou que parte do ganho no GSM8K era formato e que a queda no ARC-Easy vinha do chat. Continua sendo o primeiro corte se faltar tempo.
+- **(15/11) Acúmulo de gradiente no M local:** micro-lotes somados até 24 registros por passo, com a loss ponderada pelos tokens válidos do passo inteiro (não pela média de cada micro-lote, que distorce com padding e máscara). Assim o M local tem o mesmo batch efetivo, LR, schedule e ordem de dados do C no servidor. Só entra depois dos testes de equivalência em CPU (Fase 5).
+- **(15/11) Avaliação dos 4 modelos (pré, M, C e SFT) numa única máquina**, no fim, para a comparação (McNemar) não misturar GPUs.
+- **(15/11) Branches:** `midtraining-c` sai da `pre-treino` (um PR só para pré-treino e C); `midtraining-m` sai da `midtraining-c`. A `mid-sft` fica parada, para ser reaproveitada no SFT.
+- **(15/11) GPUs alternativas avaliadas e descartadas:** RX 7800 XT de 16 GB (ROCm só tem suporte no Linux; no Windows, a AMD declara que não há suporte a treino), RTX 3050 e RTX 2060 Super (8 GB ou menos; a 2060 Super não tem bf16).
 
 ---
 
 ## 1. Calendário
 
-Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação ao calendário original, e a folga de Qua 18 foi absorvida. As datas a partir da Fase 4 dependem da fila de GPU, que é compartilhada com outras turmas.
+Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação ao calendário original, e a folga de Qua 18 foi absorvida. As datas a partir da Fase 4 dependem da fila de GPU, que é compartilhada com outras turmas. Em 13/11, a previsão do Slurm para o início do pré-treino passou para Sáb 14, 22h57: as datas abaixo são o pior caso e deixam a entrega sem folga. O pré-treino começou Dom 15 às 18h32, ~20h depois dessa previsão. As Fases 5 a 8 serão replanejadas quando o grupo definir onde rodar as Fases 5 e 6 (no servidor, só a partir de ~Qua 18; localmente, em avaliação).
 
 | Datas | Etapa | Marco |
 |---|---|---|
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
 | Ter 10 – Qua 11 | Fase 3: piloto ✅ (job 1140, Qua 11, 13h54–15h24) | **Decisão (pendente do grupo): manter a matemática; tokenizer GPT-2** |
-| Qua 11 – Sex 13 | Fase 4: pré-treino final (~6h em 2 GPUs ou ~11h em 1 GPU, + fila) | Checkpoint publicado |
-| Sex 13 – Sáb 14 | Fase 5: mid-training M e C | Veredito da matemática |
-| Sáb 14 | Fase 6: SFT | Checkpoint final |
-| Dom 15 – Seg 16 | Fases 7 e 8: avaliação final e demo | Tabelas e demo funcionando |
+| Qua 11 – Seg 16 | Fase 4: pré-treino final em **2 GPUs** (job 1152) ✅: Dom 15, 18h32 → Seg 16, 00h16 (5h44); val_ppl final 18,8 | Checkpoint publicado |
+| Seg 16 – Qua 18 | Fase 5: mid-training. **C no servidor** (job 1173, na fila desde Seg 16 ~00h40; pior caso de início Qua 18, ~00h16) e **M local** (RTX 4060 com acúmulo de gradiente, a partir de Seg 16 à noite) | Veredito da matemática |
+| Ter 17 | Fase 6: SFT local, a partir de M, na sequência do M | Checkpoint final |
+| Qua 18 | Fase 7: avaliação dos 4 modelos numa só máquina; Fase 8: demo | Tabelas e demo funcionando |
 | Ter 17 – Qua 18 | Fase 8: README, checkpoints no HF, slides, ensaio | Entrega pronta |
 | Qui 19 | Entrega | |
 
 **Limites para acionar o plano B**
-- **Sem as 2 GPUs livres até Qui 12:** rodar o pré-treino em 1 GPU (~11h), sem esperar a outra.
-- **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados.
+- **2 GPUs obrigatórias** (decisão do grupo em 11/11; exigência do enunciado): não há plano B em 1 GPU. O `slurm/pretrain.sbatch` aborta se não tiver as duas. Para absorver imprevistos, o job reserva 36h, bem acima da estimativa.
+- **Pré-treino sem resultado até Sáb 14:** usar o último checkpoint salvo, documentando o total de tokens treinados. **A rever pelo grupo (13/11):** pela previsão do Slurm, o job só começa Sáb 14 às 22h57, então não haverá nenhum checkpoint nesse prazo. Superada em 15/11: o pré-treino começou Dom 15 às 18h32.
 - **O pré-treino final não depende do piloto:** o tokenizer padrão já é o GPT-2, e a matemática só afeta o mid-training. Ele pode entrar na fila em paralelo ao piloto, pela conta de outro membro do grupo (o limite de 1 job é por usuário).
 
 ---
@@ -75,30 +81,15 @@ Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação 
 - **Exige `TORCHINDUCTOR_SHAPE_PADDING=0`:** a compilação falhou por falta de memória no run com a opção padrão, em um teste interno de padding.
 - **Quem limita a memória são os logits:** batch × contexto × vocabulário ocupa 6,6 GB em fp32 só para o batch de 32, por causa do vocabulário de 50k.
 - **Batch de 24 por GPU:** praticamente a mesma velocidade do batch de 32, com ~7 GB de folga para fragmentação.
-- **Não medido:** velocidade em 2 GPUs, que será vista no início do pré-treino. As estimativas abaixo supõem ganho quase linear.
+- **Medido em 15/11 (job 1152):** ~122,4 mil tokens/s em 2 GPUs, ~89% de 2 × 69 mil (ganho quase linear, como suposto).
 
-**Template de job.** Use `--mem` explícito: sem ele, o padrão observado reserva ~128 GB por GPU. Evite `--exclusive`.
+**Job do pré-treino final:** `slurm/pretrain.sbatch` (2 GPUs, 32 CPUs, 96 GB, limite de 36h). Use `--mem` explícito: sem ele, o padrão observado reserva ~128 GB por GPU. Evite `--exclusive`.
 
 ```bash
-#!/bin/bash
-#SBATCH -J slm-pretrain
-#SBATCH --gres=gpu:2
-#SBATCH -c 32
-#SBATCH --mem=96G
-#SBATCH -t 1-00:00:00
-#SBATCH --no-requeue
-#SBATCH -o logs/%x.%j.out
-#SBATCH -D /home/ap211/slm
-
-source .venv/bin/activate
-export OMP_NUM_THREADS=8
-export TORCHINDUCTOR_SHAPE_PADDING=0
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
-    --config configs/final/pretrain.yaml --max-hours 23.5
+sbatch slurm/pretrain.sbatch   # da raiz do clone; qualquer membro do grupo
 ```
 
-- **Corte por tempo:** o rank 0 decide, com `--max-hours`, salvar e sair antes do limite. É mais simples que sinais, porque o `torchrun` não repassa `SIGUSR1`.
+- **Corte por tempo:** o rank 0 decide, com `--max-hours` (35,5h no pré-treino final), salvar e sair antes do limite. É mais simples que sinais, porque o `torchrun` não repassa `SIGUSR1`.
 - **Retomada automática:** repetir o mesmo comando continua do último checkpoint, mesmo com outro número de GPUs.
 - **Runs de 1 GPU** (pilotos, mid, SFT) usam `--gres=gpu:1`, sem esperar as duas.
 
@@ -115,7 +106,7 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 | Contexto | 1.024 |
 | **Total** | **≈ 114M** (75,5M em blocos, 38,6M em embeddings) |
 
-**Chinchilla:** o mínimo de 20×N dá ~2,3B tokens. Usamos 2,5B (~22×N). O nanochat relata ótimo perto de 10×N no setup dele, então não há motivo para ir muito além do mínimo pedido no enunciado. Tempo estimado: ~6h em 2 GPUs, ou ~11h em 1 GPU, partindo de 69 mil tokens/s por GPU e somando uma folga para dados, avaliação e checkpoints.
+**Chinchilla:** o mínimo de 20×N dá ~2,3B tokens. Usamos 2,5B (~22×N). O nanochat relata ótimo perto de 10×N no setup dele, então não há motivo para ir muito além do mínimo pedido no enunciado. Na prática, treinamos 1 época completa dos dados: 2.497.560.576 tokens (~21,9×N). Tempo estimado: ~5–6h em 2 GPUs, partindo de 69 mil tokens/s por GPU e somando uma folga para dados, avaliação e checkpoints.
 
 | Componente | Escolha | Justificativa |
 |---|---|---|
@@ -126,8 +117,8 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 | Normalização | **RMSNorm** | Mais barata que LayerNorm; citada como diferencial |
 | Embeddings | **Tied**, sem weight decay | Evita gastar mais 38,6M na saída; SmolLM3 faz o mesmo |
 | Tokenizer | **BPE do GPT-2** via `tiktoken` | Ver abaixo |
-| Otimizador | **AdamW** (WD=0,1, grad clip 1) | Simples e usado no SmolLM3. O Muon do nanochat depende de vários ajustes; não dá para validá-lo no prazo |
-| Schedule | **WSD**: warmup de ~2.000 steps, decaimento linear nos 10% finais | Usado no SmolLM3 |
+| Otimizador | **AdamW** (WD=0,1, grad clip 1), **LR de pico 3e-4** | Simples e usado no SmolLM3. O Muon do nanochat depende de vários ajustes; não dá para validá-lo no prazo. LR: ver abaixo |
+| Schedule | **WSD**: warmup de 100M tokens (~2.000 steps em 2 GPUs), decaimento linear nos 10% finais | Usado no SmolLM3 |
 | Precisão | bf16 + `torch.compile` + DDP | Confirmar suporte a bf16 na Fase 0 |
 
 **Tokenizer**
@@ -136,6 +127,13 @@ torchrun --standalone --nproc_per_node=2 scripts/pretrain.py \
 - **Dígitos:** separar os dígitos é uma hipótese, não uma medição. O nanochat usa blocos de até 2 dígitos, escolhidos para economizar vocabulário, não por testes de aritmética. A variante só entra se ganhar no piloto (Fase 3).
 - **BPE próprio de 32k:** é o que o nanochat faz, e economizaria ~14M de parâmetros. Fica de fora porque o ganho não compensa o trabalho e o risco neste prazo.
 - **Trocar o tokenizer depois obrigaria a refazer o pré-treino**, então a decisão fecha no fim do piloto.
+
+**Taxa de aprendizado (pré-treino)**
+- **Escolha: 3e-4**, decidida pelo grupo em 11/11.
+- **Ponto de partida:** o GPT-3 Small (125M, tamanho próximo ao nosso) usou 6e-4 com batch de ~0,5M tokens (Brown et al., 2020, Tabela 2.1).
+- **Ajuste pelo batch:** o nosso batch é de ~49 mil tokens (2 GPUs × 24 × 1.024), ~10× menor. Escalar a LR pela raiz do batch, regra usada no nanochat, daria ~1,8e-4. O 3e-4 fica entre as duas referências.
+- **Por que não a LR do nanochat:** ele usa Muon (LR 0,02 nas matrizes) e AdamW com uma LR por grupo de parâmetros (`scripts/base_train.py`). Esses valores não se transferem para um AdamW único.
+- **Verificação:** acompanhar a curva de loss na primeira hora. O trainer aborta se a loss deixar de ser finita.
 
 **Não vamos adotar:** Muon, value embeddings, janela deslizante, QK-norm, escalares de resíduo, NoPE, YaRN, MoE, Mamba, intra-document masking, RL e ferramenta de calculadora. No nanochat, parte desses recursos ajudou, mas com um sweep de 320 runs que não temos como repetir, e vários outros testes não deram ganho.
 
@@ -277,17 +275,66 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 
 **Saída:** decisão sobre a matemática e o tokenizer (pendente do grupo; recomendação: manter a matemática e o GPT-2 padrão). Ressalva: como alerta o próprio autor do nanochat, resultado em escala pequena pode não se transferir para o modelo final.
 
-### Fase 4: Pré-treino final (~6h em 2 GPUs, batch de 24 por GPU)
-- [ ] Checkpoint a cada ~30 min, mantendo os 2 últimos + marcos
-- [ ] Logar loss e perplexidade de validação; guardar amostras de geração
+### Fase 4: Pré-treino final (~5–6h em 2 GPUs obrigatórias, batch de 24 por GPU)
+- [x] Config e job: `configs/final/pretrain.yaml` e `slurm/pretrain.sbatch`. 1 época (2.497.560.576 tokens), LR 3e-4, warmup de 100M tokens, avaliação a cada 2.500 steps (~15 min), checkpoint a cada 5.000 steps (~30 min). Reserva de 36h
+- [x] Submetido: job 1152 (`ap205`), Qua 11 à tarde, commit `ab19f1a`. Pasta de checkpoints vazia antes da submissão (treino parte do zero)
+- [x] Início: Dom 15/11 às 18h32 (job 1152), em 2× RTX A5000, ~20h depois da previsão de 13/11 e ~95h depois da submissão. O 1156, submetido depois, começou antes; causa não identificada
+- [x] **Concluído** (job 1152, `COMPLETED`, exit 0): Seg 16 às 00h16, em 5h44 (estimativa: ~5–6h). 50.813 steps, 2.497.560.576 tokens, ~122,6 mil tok/s até o fim. Perplexidade de validação: 23,6 no step 25.000 → **18,82** no fim (o decaimento do WSD, nos 10% finais, baixou a loss de treino de ~3,25 para ~3,13). `final.pt` com 456.503.035 bytes; marcos guardados em `checkpoints/pretrain_marcos/` (`final.pt` e `ckpt_000045000.pt`)
+- [x] Marcos: `keep_last: 3`, e no fim do job o `slurm/pretrain.sbatch` copia o `final.pt` e o `ckpt_000045000.pt` para `checkpoints/pretrain_marcos/`. O decaimento do WSD começa no passo 45.733; o ckpt 45.000 é o último da fase estável e permite refazer o decaimento
+- [x] Checkpoint a cada ~34 min (1,37 GB cada), mantendo os 3 últimos: confirmado em 15/11 (ckpts 15.000, 20.000 e 25.000)
+- [ ] Logar loss e perplexidade de validação (`metrics.jsonl`, junto dos checkpoints); guardar amostras de geração
+- [x] Velocidade e curva conferidas em 15/11, após 3h (step 26.600 de 50.813): ~122,4 mil tok/s; val_ppl 59.030 → 53,4 (step 2.500) → 28,5 (10.000) → 23,6 (25.000), sempre caindo e já abaixo do piloto no fim (32,5); norma do gradiente estável (~0,55–0,60). LR 3e-4 sem instabilidade
+- [x] Trava (`flock`) testada no `/scratch` do CDIA em 11/11: um segundo processo é barrado e a trava se solta quando o primeiro termina
+- [ ] Regra do grupo: o pré-treino só roda por `sbatch slurm/pretrain.sbatch`. Rodar `scripts/pretrain.py` direto ignora a trava e pode corromper os checkpoints compartilhados
+- [ ] Amostras de geração, HellaSwag e ARC do checkpoint final: *proposta* de rodar o `evaluate.py` no início do job da Fase 5, sem gastar uma entrada a mais na fila
 
 **Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF.
 
 ### Fase 5: Mid-training
-- [ ] Pesos do pré-treino, otimizador zerado, LR 1e-4 a 3e-4, warmup curto, 300M tokens
-- [ ] Rodar M e C em sequência, no mesmo job (limite de 1 job por usuário)
+- [x] **Onde rodar (decidido em 15/11):** C no servidor; M e SFT localmente, com acúmulo de gradiente. Ver Decisões fechadas
+- [x] C: config `configs/final/mid_c.yaml` (pesos do pré-treino final, otimizador zerado, LR 3e-4, warmup de 10M tokens, 1 época = 14.669 steps, ~292M tokens úteis; aritmética a cada 1.500 steps) e job `slurm/mid_c.sbatch` (1 GPU, limite de 6h, só treino; aborta sem o `pretrain/final.pt`; trava própria)
+- [x] C: submetido pelo `ap205` em Seg 16 ~00h40 (job 1173, branch `midtraining-c`), assim que o pré-treino liberou a vaga. 2º na fila de GPU, atrás do 1172 (1 GPU, 2 dias); as 2 GPUs estão com jobs de 2 dias iniciados Seg 16 ~00h16. Pior caso de início: Qua 18 ~00h16; fim ~Qua 18 ~03h (*estimativa*)
+- [ ] *Proposta (16/11, a decidir):* se o 1173 não tiver começado quando o M e o SFT locais terminarem, rodar o C também localmente (mesma máquina e mesmo acúmulo) e usar o que terminar primeiro, cancelando o outro
+- [ ] M: mesmos hiperparâmetros do C, localmente, com acúmulo de gradiente (branch `midtraining-m`). Antes do run: testes de equivalência em CPU (um passo com 24 registros de uma vez igual a 6 micro-lotes de 4; padding e máscara desiguais entre micro-lotes; treino curto inteiro; retomada; os 44 testes atuais sem mudança), benchmark local para escolher o micro-lote e ~50 passos reais conferindo a primeira `val_loss`
 - [ ] Rodar os testes e aplicar o critério da Seção 6
 - [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242); no piloto, de 32,4 para 61,4 (M) e 56,4 (C)
+
+#### Como rodar o mid-training C no servidor (qualquer membro do grupo)
+
+Pré-requisitos: acesso ao CDIA com o **seu próprio usuário** e nenhum outro job seu na fila (o limite é 1 job por usuário). O pré-treino final pode ainda estar na fila ou rodando: enquanto ele ocupa as 2 GPUs, o C não começa; e, se o pré-treino falhar, o C aborta sozinho na partida, porque confere o `checkpoints/pretrain/final.pt`.
+
+1. No nó de login, clonar o repositório do grupo numa pasta nova e entrar na branch do C:
+   ```bash
+   git clone <URL do repositório> ~/slm-c
+   cd ~/slm-c && git checkout midtraining-c && mkdir -p logs
+   ```
+   A pasta `logs/` não vem no clone, e sem ela o Slurm não grava o log do job.
+2. Instalar o `uv` só para o seu usuário, se ainda não tiver:
+   ```bash
+   python3 -m pip install --user uv
+   ```
+3. Criar o ambiente Python (job só de CPU, ~5 min) e esperar ele terminar:
+   ```bash
+   sbatch slurm/setup.sbatch
+   squeue -u $USER                    # repetir até a lista ficar vazia
+   tail -n 3 logs/slm-setup.*.out     # a última linha deve ser "torch ... | cuda build 12.8"
+   ```
+4. Submeter o C (só depois do setup, por causa do limite de 1 job):
+   ```bash
+   sbatch slurm/mid_c.sbatch
+   squeue -u $USER                    # PD = na fila; R = rodando
+   ```
+5. Quando estiver rodando, conferir o início do log:
+   ```bash
+   tail -n 20 logs/slm-mid-c.*.out
+   ```
+   Esperado: `pesos iniciais de .../pretrain/final.pt; otimizador zerado`, `params=114.1M | gpus=1 | batch=24`, e linhas `step ... | loss ... | tok/s` a ~65–69 mil tok/s (*estimativa*). A cada 1.500 steps, uma linha com `val_loss` e `arith_acc`. Duração estimada: ~1,5–3h.
+
+Cuidados:
+- Enquanto o job estiver na fila ou rodando, **não trocar de branch nem fazer `git pull` nesse clone**: o job lê o código e a config da pasta no momento em que começa.
+- Rodar só pelo `sbatch`: `scripts/midtrain.py` direto ignora a trava (`.lock`) e pode corromper os checkpoints compartilhados.
+- Se o job cair ou estourar o limite, basta resubmeter o mesmo `sbatch`: ele retoma do último checkpoint. Se o `final.pt` do C já existir, o job não faz nada.
+- Avisar o grupo ao submeter e ao terminar. O resultado fica em `checkpoints/mid_c/final.pt`, no diretório compartilhado (ver `DADOS.md`).
 
 **Saída:** veredito e checkpoint publicado.
 
@@ -298,7 +345,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 **Saída:** para as mesmas perguntas, respostas melhores que no mid, com parada correta.
 
 ### Fase 7: Avaliação final
-- [ ] Em pré, C, M e SFT: perplexidade, HellaSwag, ARC-Easy (múltiplos benchmarks são diferencial), aritmética e GSM8K
+- [ ] Em pré, C, M e SFT: perplexidade, HellaSwag, ARC-Easy (múltiplos benchmarks são diferencial), aritmética e GSM8K. Os 4 avaliados na mesma máquina local (decisão de 15/11), com o `mid_c/final.pt` copiado do servidor
 - [ ] Comparar antes e depois do SFT nas mesmas perguntas
 - [ ] Gerar tabelas e gráficos a partir de `results/*.json`
 
@@ -344,12 +391,15 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 
 | Risco | Mitigação |
 |---|---|
-| Fila cheia perto do prazo | Fila compartilhada com outras turmas (em 10 e 11/11, as 2 GPUs ficaram ocupadas por ~2 dias). Pré-treino até Sex 13; sem 2 GPUs até Qui 12, rodar em 1 GPU. A folga de Qua 18 já foi consumida. O limite de 1 job é por usuário: membros diferentes do grupo podem ter jobs simultâneos. Um job na fila pode ter o limite de tempo aumentado (`scontrol update`) sem perder a posição |
+| Fila cheia perto do prazo | Fila compartilhada com outras turmas (em 10 e 11/11, as 2 GPUs ficaram ocupadas por ~2 dias). Pré-treino até Sex 13, com **2 GPUs obrigatórias**: o job só começa com as duas livres ao mesmo tempo. Submetido em 11/11 (job 1152, reserva de 36h). Em 12/11, um job submetido depois do 1152 começou antes dele (causa não identificada), adiando a previsão em ~24h. A folga de Qua 18 já foi consumida. O limite de 1 job é por usuário: membros diferentes do grupo podem ter jobs simultâneos. Um job na fila pode ter o limite de tempo aumentado (`scontrol update`) sem perder a posição. Em 15/11, com o pré-treino rodando, 3 jobs de 1 GPU (limite de 2 dias) entraram na fila: no servidor, as Fases 5 e 6 só começariam ~Qua 18. Em avaliação: rodar localmente |
 | Falta de memória na GPU durante o treino | Batch de 24 (~7 GB de folga); avaliação sem gradiente e com batch menor |
 | Run interrompido | Checkpoints frequentes e retomada testada na Fase 1 |
-| `/scratch` sem backup | Copiar os marcos para `/home` e publicar no HF |
+| LR alta para o nosso batch (pré-treino instável) | 3e-4 é metade do valor do GPT-3 Small; curva de loss conferida na primeira hora; o trainer aborta em loss não finita. Se divergir: reduzir a LR e recomeçar |
+| `/scratch` sem backup | Marcos copiados para `checkpoints/pretrain_marcos/` no fim do job (protege do `keep_last`, não de falha do disco). Publicar o `final.pt` no HF logo depois do treino |
 | Matemática sem efeito | Piloto (11/11): efeito significativo na aritmética (M × pré p = 0,0003; M × C p = 0,006), concentrado em 1 dígito. Tarefa reserva mantida; resultado negativo reportado com IC |
 | Mid-training piora o conhecimento geral | No piloto, o ARC-Easy caiu ~9 pp e a perplexidade no FineWeb quase dobrou após o mid (M e C). Medir no modelo final e discutir nos slides |
+| Acúmulo de gradiente com erro sutil (M diferente do C sem ninguém perceber) | Loss ponderada pelos tokens válidos do passo; testes de equivalência em CPU antes do run; primeira `val_loss` do M conferida |
+| Máquina local desligar ou reiniciar durante o M ou o SFT | Retomada pelo último checkpoint; desligar suspensão e atualizações automáticas antes de começar |
 | Geração em CPU lenta na demo | Medir com antecedência; vídeo de reserva |
 
 ---
@@ -357,7 +407,8 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 ## 10. Fontes
 
 - [SmolLM3](https://huggingface.co/blog/smollm3): GQA, WSD, otimizador
-- [nanochat](https://github.com/karpathy/nanochat): `gpt.py`, `tokenizer.py`, `tok_train.py`, `chat_sft.py`, `tasks/gsm8k.py`
+- [nanochat](https://github.com/karpathy/nanochat): `gpt.py`, `tokenizer.py`, `tok_train.py`, `chat_sft.py`, `tasks/gsm8k.py`, `scripts/base_train.py` (LRs e escala pelo batch)
+- [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165) (GPT-3), Tabela 2.1: LR e batch do GPT-3 Small
 - [Beating GPT-2 for <$100: the nanochat journey](https://github.com/karpathy/nanochat/discussions/481)
 - [Benchmarking Optimizers for LLM Pretraining](https://arxiv.org/html/2509.01440v1)
 - [nanochat no DGX Spark](https://objectgraph.com/blog/nanochat-dgx-spark/)

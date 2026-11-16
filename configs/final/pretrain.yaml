@@ -1,0 +1,24 @@
+# Fase 4: pre-treino final. Arquitetura da Secao 4 do PLANO (~114M params).
+# Le e grava em $SLM_SHARED: o run e do grupo e qualquer membro pode retoma-lo ao resubmeter.
+run_dir: ${SLM_SHARED}/checkpoints/pretrain
+data_dir: ${SLM_SHARED}/data/pretrain/train
+val_dir: ${SLM_SHARED}/data/pretrain/val
+epochs: 1.0               # 2.439.024 registros x 1.024 = 2.497.560.576 tokens (~22 x N), sem repetir dados
+batch_size: 24            # por GPU; 17,4 GB no benchmark, ~7 GB de folga
+peak_lr: 3.0e-4           # meio-termo: GPT-3 Small usou 6e-4 com batch de ~0,5M tokens (Brown et al. 2020);
+                          # ajustado pela raiz do nosso batch (~49k tokens) daria ~1,8e-4. Ver PLANO, Secao 4
+warmup_tokens: 100000000  # ~2.000 steps em 2 GPUs (PLANO, Secao 4)
+decay_frac: 0.1           # WSD: decaimento linear nos 10% finais
+log_every: 100
+eval_every: 2500          # ~15 min; perplexidade de validacao ao longo do treino (exigencia do enunciado)
+eval_batches: 100
+ckpt_every: 5000          # ~30 min (PLANO, Fase 4)
+keep_last: 3              # 3, nao 2: o ckpt do passo 45.000 (fim da fase estavel) sobrevive
+                          # mesmo se o job for interrompido entre 45.000 e 50.000
+model:
+  d_model: 768
+  n_layer: 12
+  n_head: 12
+  n_kv_head: 4
+  ffn_hidden: 2048
+  max_seq_len: 1024
