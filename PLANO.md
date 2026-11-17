@@ -16,6 +16,7 @@ Atualizado em 16/11/2026. **Prazo: 19/11/2026** (3 dias). Os itens marcados como
 - **(15/11) Branches:** `midtraining-c` sai da `pre-treino` (um PR só para pré-treino e C); `midtraining-m` sai da `midtraining-c`. A `mid-sft` fica parada, para ser reaproveitada no SFT.
 - **(15/11) GPUs alternativas avaliadas e descartadas:** RX 7800 XT de 16 GB (ROCm só tem suporte no Linux; no Windows, a AMD declara que não há suporte a treino), RTX 3050 e RTX 2060 Super (8 GB ou menos; a 2060 Super não tem bf16).
 - **(16/11) M e SFT também no servidor:** com o C pronto e uma GPU aparentemente livre, foi submetido o `slurm/mid_sft.sbatch` (branch `mid-sft`, job 1175): avaliação do pré-treino → M → C (pulado, já existe) → SFT → avaliações de M, C e SFT → McNemar, tudo em 1 GPU, lote 24 sem acúmulo. O M local (RTX 4060, com acúmulo) continua como reserva e como teste do acúmulo de gradiente. *Proposta (a decidir):* o M e o SFT do servidor como oficiais, por terem a mesma GPU, o mesmo lote e o mesmo ambiente do C.
+- *(16/11, noite) A decidir:* M, SFT e as avaliações locais terminaram às 11h18 de Seg 16. Proposta do Orange: usar o M e o SFT **locais** como oficiais, avaliar o C na mesma máquina local e cancelar o job 1175 (que só começaria Qua 18, 11h58), liberando a GPU para as outras turmas.
 
 ---
 
@@ -297,7 +298,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [x] C: submetido pelo `ap205` em Seg 16 ~00h40 (job 1173, branch `midtraining-c`), assim que o pré-treino liberou a vaga. 2º na fila de GPU, atrás do 1172 (1 GPU, 2 dias); as 2 GPUs estão com jobs de 2 dias iniciados Seg 16 ~00h16. Pior caso de início: Qua 18 ~00h16; fim ~Qua 18 ~03h (*estimativa*)
 - [x] **C concluído** (job 1173, `COMPLETED`, exit 0): Seg 16, das 10h28 às 11h58 (1h30; estimativa: 1,5–3h), a ~68,8 mil tok/s. 14.669 steps. Perplexidade na validação do chat: 22,8 → **4,86** (o decaimento final baixou de 5,47 para 4,86). Aritmética: 0,81% → **1,17%**, oscilando entre 0,99% e 2,44% ao longo do treino, sem tendência (no piloto, C terminou em 1,3%). Células finais: soma de 1 dígito 4,9%, multiplicação de 1 dígito 9,9%, 2 dígitos ~0
 - [x] Mesma avaliação em GPUs diferentes: o `step 0` do C (servidor) e o do M local medem o mesmo modelo (o pré-treino). `val_loss` idêntica (3,1256), mas a aritmética deu 0,81% no servidor e 0,72% localmente (1 item de 1.107). Reforça a decisão de avaliar os 4 modelos na mesma máquina
-- [ ] M e SFT no servidor: job 1175 (`slurm/mid_sft.sbatch`), submetido Seg 16 à tarde; na fila (Resources), com o nó mostrando as 2 GPUs em uso
+- [ ] M e SFT no servidor: job 1175 (`slurm/mid_sft.sbatch`), submetido Seg 16 à tarde; na fila (Resources). O 1174 (`ap220`) ocupa as **2 GPUs** (`gres:gpu:2`) desde Seg 16 11h58; previsão do Slurm para o 1175: Qua 18, 11h58. Redundante com o run local (ver decisão a tomar)
 - [x] M: acúmulo de gradiente implementado em `slm/trainer.py` (`grad_accum`, padrão 1 = caminho anterior, sem mudança). Cada passo soma `grad_accum` micro-lotes, com a loss somada por token e dividida pelos tokens válidos do passo inteiro
 - [x] Testes de equivalência em CPU (`tests/test_grad_accum.py`, **6 de 6 passando** em 16/11): um passo com 24 registros = 6 micro-lotes de 4 (loss e gradientes), também com padding e máscara desiguais entre micro-lotes; controle mostrando que a média simples por micro-lote **não** bate; treino curto inteiro (pesos finais, curva e validação iguais); retomada com acúmulo; valor inválido recusado
 - [x] Testes antigos no notebook (Windows, CPU): 48 de 50 passando. Os 2 que falham **falham igual no código original** (falta o `streamlit` no ambiente de teste; o teste de 2 processos não abre a conexão local no Windows). Não têm relação com o acúmulo; no servidor (Linux) os 44 passavam
@@ -305,7 +306,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [x] `scripts/evaluate.py`: opções `--ppl-batch-size` e `--gsm-batch-size` (padrões iguais aos do servidor), para a avaliação caber em 8 GB
 - [x] Dados transferidos para o PC local em 16/11 (2,44 GB, SHA-256 idêntico nos dois lados)
 - [x] Checagem local (16/11, 02h06): dados ok, 394 GB livres, RTX 4060 com 6,9 de 8,0 GiB livres, bf16 ok. Medição dos micro-lotes: 8 e 6 passaram da memória física (10,86 e 9,22 GiB) e o Windows usou a RAM sem erro, ficando ~6–8x mais lentos (2,2 e 2,8 mil tok/s); 4 ficou no limite (6,85 GiB, 12,2 mil); **3 escolhido** (5,09 GiB, 18,0 mil tok/s; 3 × 8 = 24); 2 e 1 cabem, mais lentos
-- [ ] **M local em execução** desde Seg 16 às 02h29. `step 0`: val_loss 3,1256 (val_ppl 22,8) no chat de M, abaixo do piloto (3,72); aritmética 0,7% (ponto de partida da curva). `step 100`: loss 2,48, norma do gradiente 1,25, **16,5 mil tok/s** (medido). Previsão: M até ~08h50, SFT até ~11h, avaliações até ~13h–15h (*estimativa*)
+- [x] **M e SFT locais concluídos** (RTX 4060, micro-lote 3 × 8 = 24): início Seg 16 às 02h29; M e SFT prontos antes das 10h01; avaliações das 10h01 às 11h18 (~25–27 min por modelo). `step 0` do M: val_loss 3,1256 (val_ppl 22,8) no chat de M; `step 100`: 16,5 mil tok/s. O "step ~1000" visto às 08h30 era, muito provavelmente, do SFT (5.070 steps), já em andamento
 - [ ] Rodar os testes e aplicar o critério da Seção 6
 - [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242); no piloto, de 32,4 para 61,4 (M) e 56,4 (C)
 
@@ -368,12 +369,29 @@ Cuidados: não usar a GPU para outra coisa durante o treino; desligar a suspens�
 **Saída:** veredito e checkpoint publicado.
 
 ### Fase 6: SFT
+- [x] SFT local concluído (16/11): a partir do M local, LR 2e-5, 1 época (5.070 steps, 124.600.320 tokens), micro-lote 3 × 8 = 24. Perplexidade na validação do SFT no fim: **4,66**
 - [ ] A partir de M. Máscara `-100` em tudo que não for resposta do assistente (incluir `<|end|>`, para o modelo aprender a parar)
 - [ ] LR 1e-5 a 3e-5, 1–2 épocas, subset curado; monitorar validação para detectar overfitting
 
 **Saída:** para as mesmas perguntas, respostas melhores que no mid, com parada correta.
 
 ### Fase 7: Avaliação final
+- [x] **Avaliações locais (16/11, RTX 4060), pré-treino, M e SFT:**
+
+  | Modelo | Perplexidade (FineWeb) | HellaSwag | ARC-Easy | Aritmética | GSM8K | GSM8K: respondeu |
+  |---|---|---|---|---|---|---|
+  | Pré-treino | 18,77 | 28,1% | 50,8% | 0,7% | 1,9% | 86,4% |
+  | M | 61,07 | 27,1% | 37,2% | **3,2%** | **4,1%** | 99,4% |
+  | SFT | 62,65 | 27,4% | 37,3% | 3,1% | 2,8% | 99,5% |
+  | C | *a avaliar na mesma máquina* | | | | | |
+
+  McNemar, M contra o pré-treino: aritmética p = 7,4e-6 (8 → 35 acertos); GSM8K p = 0,0009; HellaSwag p = 0,0007 (queda de 1,0 ponto); ARC-Easy p = 2e-34 (queda de 13,6 pontos).
+  McNemar, SFT contra M: GSM8K p = 0,0498 (queda de 1,3 ponto, limítrofe); HellaSwag p = 0,047 (alta de 0,3 ponto, limítrofe); aritmética e ARC-Easy sem diferença.
+  Aritmética do M por célula: soma de 1 dígito 21,0%, multiplicação de 1 dígito 14,8%, subtração de 1 dígito 4,4%; 2 dígitos entre 0,3% e 0,7%.
+- [ ] **Critérios da Seção 6 (parcial, falta o C):** M acima do pré-treino em aritmética ✅ (p = 7,4e-6); M acima de C ⏳ (C ainda não avaliado na mesma máquina).
+  Transferência para o GSM8K: M acima do pré-treino (p = 0,0009) e, diferente do piloto, **não é só formato**: entre as perguntas respondidas com número, o acerto vai de 2,2% para 4,1%.
+  Sem regressão no HellaSwag: ❌ queda pequena, mas significativa (28,1% → 27,1%). A queda do ARC-Easy se repete (no piloto, ocorreu em M e em C); o C dirá se a causa é o chat ou a matemática
+- [ ] Avaliar o C localmente: copiar `checkpoints/mid_c/final.pt` (456.503.035 bytes, SHA-256 conferido) para `shared/checkpoints/mid_c/` e rodar de novo `scripts/run_local.py` (pula o que já existe, avalia o C e roda o McNemar M × C; ~25 min)
 - [ ] Em pré, C, M e SFT: perplexidade, HellaSwag, ARC-Easy (múltiplos benchmarks são diferencial), aritmética e GSM8K. Os 4 avaliados na mesma máquina local (decisão de 15/11), com o `mid_c/final.pt` copiado do servidor
 - [ ] Comparar antes e depois do SFT nas mesmas perguntas
 - [ ] Gerar tabelas e gráficos a partir de `results/*.json`

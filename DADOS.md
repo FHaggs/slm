@@ -76,7 +76,7 @@ Em 16/11, um arquivo `.tar` de 2.443.468.800 bytes foi gerado no servidor e baix
 | `data/pretrain/val` | Perplexidade no FineWeb, nas avaliações |
 | `checkpoints/pretrain/final.pt` e `metrics.jsonl` | Ponto de partida do M; curva do pré-treino para os gráficos |
 
-Localmente, o `scripts/run_local.py` grava em `shared/checkpoints/{mid_m,sft}` (mantendo os 2 últimos checkpoints periódicos), os resultados em `results/final/*.json` no clone e os logs em `logs/local_run.log` e `logs/local_status.txt`. A pasta irmã `local-cache/` guarda o cache dos benchmarks.
+Localmente, o `scripts/run_local.py` grava em `shared/checkpoints/{mid_m,sft}` (mantendo os 2 últimos checkpoints periódicos), os resultados em `results/final/*.json` no clone e os logs em `logs/local_run.log` e `logs/local_status.txt`. A pasta irmã `local-cache/` guarda o cache dos benchmarks. Em 16/11 foram gerados `results/final/{pretrain,mid_m,sft}.json` (ainda não versionados) e os `final.pt` de `mid_m` e `sft` na máquina local, sem cópia no servidor.
 
 ## Fora do diretório compartilhado
 
