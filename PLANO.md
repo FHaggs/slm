@@ -281,7 +281,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [x] Config e job: `configs/final/pretrain.yaml` e `slurm/pretrain.sbatch`. 1 época (2.497.560.576 tokens), LR 3e-4, warmup de 100M tokens, avaliação a cada 2.500 steps (~15 min), checkpoint a cada 5.000 steps (~30 min). Reserva de 36h
 - [x] Submetido: job 1152 (`ap205`), Qua 11 à tarde, commit `ab19f1a`. Pasta de checkpoints vazia antes da submissão (treino parte do zero)
 - [x] Início: Dom 15/11 às 18h32 (job 1152), em 2× RTX A5000, ~20h depois da previsão de 13/11 e ~95h depois da submissão. O 1156, submetido depois, começou antes; causa não identificada
-- [x] **Concluído** (job 1152, `COMPLETED`, exit 0): Seg 16 às 00h16, em 5h44 (estimativa: ~5–6h). 50.813 steps, 2.497.560.576 tokens, ~122,6 mil tok/s até o fim. Perplexidade de validação: 23,6 no step 25.000 → **18,82** no fim (o decaimento do WSD, nos 10% finais, baixou a loss de treino de ~3,25 para ~3,13). `final.pt` com 456.503.035 bytes; marcos guardados em `checkpoints/pretrain_marcos/` (`final.pt` e `ckpt_000045000.pt`)
+- [x] **Concluído** (job 1152, `COMPLETED`, exit 0): Seg 16 às 00h16, em 5h44 (estimativa: ~5–6h). 50.813 steps, 2.497.560.576 tokens, ~122,6 mil tok/s até o fim. Perplexidade de validação: 23,6 no step 25.000 → **18,82** no fim; loss de treino ~3,13 nos últimos steps. *Correção (16/11):* uma versão anterior deste item dizia que o decaimento baixou a loss de treino "de ~3,25 para ~3,13"; o ~3,25 não tinha fonte (o trecho do log conferido começa no step 50.300). O efeito do decaimento será medido no gráfico do `metrics.jsonl`. `final.pt` com 456.503.035 bytes; marcos guardados em `checkpoints/pretrain_marcos/` (`final.pt` e `ckpt_000045000.pt`)
 - [x] Marcos: `keep_last: 3`, e no fim do job o `slurm/pretrain.sbatch` copia o `final.pt` e o `ckpt_000045000.pt` para `checkpoints/pretrain_marcos/`. O decaimento do WSD começa no passo 45.733; o ckpt 45.000 é o último da fase estável e permite refazer o decaimento
 - [x] Checkpoint a cada ~34 min (1,37 GB cada), mantendo os 3 últimos: confirmado em 15/11 (ckpts 15.000, 20.000 e 25.000)
 - [ ] Logar loss e perplexidade de validação (`metrics.jsonl`, junto dos checkpoints); guardar amostras de geração
@@ -397,6 +397,7 @@ Cuidados: não usar a GPU para outra coisa durante o treino; desligar a suspens�
 - [ ] Gerar tabelas e gráficos a partir de `results/*.json`
 
 ### Fase 8: Demo e entrega
+- [ ] **Checklist, comandos e tutorial de uso do modelo em `ENTREGA.md`** (16/11): disponibilizar os checkpoints (Hugging Face, cópia no servidor, resultados no Git), o que falta com estimativas, roteiro dos slides e perguntas prováveis
 - [ ] **Demo em Streamlit rodando localmente em notebook.** O login não aguenta e a GPU pode estar ocupada no dia. Exportar `safetensors` fp16 (~200 MB) e medir tokens/s em CPU
 - [ ] Ter um vídeo de reserva, caso a demo ao vivo falhe
 - [ ] Publicar os 3 checkpoints; README com reprodução por etapa e créditos
