@@ -14,6 +14,7 @@ Atualizado em 16/11/2026. **Prazo: 19/11/2026** (3 dias). Os itens marcados como
 - **(15/11) Acúmulo de gradiente no M local:** micro-lotes somados até 24 registros por passo, com a loss ponderada pelos tokens válidos do passo inteiro (não pela média de cada micro-lote, que distorce com padding e máscara). Assim o M local tem o mesmo batch efetivo, LR, schedule e ordem de dados do C no servidor. Só entra depois dos testes de equivalência em CPU (Fase 5).
 - **(15/11) Avaliação dos 4 modelos (pré, M, C e SFT) numa única máquina**, no fim, para a comparação (McNemar) não misturar GPUs.
 - **(15/11) Branches:** `midtraining-c` sai da `pre-treino` (um PR só para pré-treino e C); `midtraining-m` sai da `midtraining-c`. A `mid-sft` fica parada, para ser reaproveitada no SFT.
+- **(16/11) PRs:** #1 (`main` do fork: piloto e pré-treino) aceito em 15/11; #2 (`midtraining-c`) aceito em 16/11. PR final da `midtraining-m`: a abrir em https://github.com/FHaggs/slm/compare/main...Xererr:slm-scherer:midtraining-m. A `mid-sft` não vai para PR (anterior ao #2).
 - **(15/11) GPUs alternativas avaliadas e descartadas:** RX 7800 XT de 16 GB (ROCm só tem suporte no Linux; no Windows, a AMD declara que não há suporte a treino), RTX 3050 e RTX 2060 Super (8 GB ou menos; a 2060 Super não tem bf16).
 - **(16/11) M e SFT também no servidor:** com o C pronto e uma GPU aparentemente livre, foi submetido o `slurm/mid_sft.sbatch` (branch `mid-sft`, job 1175): avaliação do pré-treino → M → C (pulado, já existe) → SFT → avaliações de M, C e SFT → McNemar, tudo em 1 GPU, lote 24 sem acúmulo. O M local (RTX 4060, com acúmulo) continua como reserva e como teste do acúmulo de gradiente. *Proposta (a decidir):* o M e o SFT do servidor como oficiais, por terem a mesma GPU, o mesmo lote e o mesmo ambiente do C.
 - *(16/11, noite) A decidir:* M, SFT e as avaliações locais terminaram às 11h18 de Seg 16. Proposta do Orange: usar o M e o SFT **locais** como oficiais, avaliar o C na mesma máquina local e cancelar o job 1175 (que só começaria Qua 18, 11h58), liberando a GPU para as outras turmas.
@@ -290,7 +291,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [ ] Regra do grupo: o pré-treino só roda por `sbatch slurm/pretrain.sbatch`. Rodar `scripts/pretrain.py` direto ignora a trava e pode corromper os checkpoints compartilhados
 - [ ] Amostras de geração, HellaSwag e ARC do checkpoint final: *proposta* de rodar o `evaluate.py` no início do job da Fase 5, sem gastar uma entrada a mais na fila
 
-**Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF.
+**Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF. ✅ Publicado em 16/11 (`Xererr/slm-114m`, `pretrain/final.pt`).
 
 ### Fase 5: Mid-training
 - [x] **Onde rodar (decidido em 15/11):** C no servidor; M e SFT localmente, com acúmulo de gradiente. Ver Decisões fechadas
@@ -400,7 +401,8 @@ Cuidados: não usar a GPU para outra coisa durante o treino; desligar a suspens�
 - [ ] **Checklist, comandos e tutorial de uso do modelo em `ENTREGA.md`** (16/11): disponibilizar os checkpoints (Hugging Face, cópia no servidor, resultados no Git), o que falta com estimativas, roteiro dos slides e perguntas prováveis
 - [ ] **Demo em Streamlit rodando localmente em notebook.** O login não aguenta e a GPU pode estar ocupada no dia. Exportar `safetensors` fp16 (~200 MB) e medir tokens/s em CPU
 - [ ] Ter um vídeo de reserva, caso a demo ao vivo falhe
-- [ ] Publicar os 3 checkpoints; README com reprodução por etapa e créditos
+- [x] Checkpoints publicados no Hugging Face (16/11): https://huggingface.co/Xererr/slm-114m (público), com `pretrain`, `mid_m`, `sft` e `results` (pré, M e SFT). Falta enviar: `mid_c`, os `metrics.jsonl` e a página do modelo (escrita em `hf/README.md`)
+- [ ] README com reprodução por etapa e créditos
 - [ ] Slides: arquitetura, Chinchilla, curvas, resultados, benchmark de matemática, discussão, demo (10–15 min)
 - [ ] Todo o grupo deve entender o código gerado com IA, pois haverá perguntas na apresentação
 

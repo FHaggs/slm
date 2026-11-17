@@ -9,11 +9,11 @@ Atualizado em 16/11/2026, à noite. **Prazo: 19/11/2026.** Este arquivo compleme
 | Fase | Situação | Onde está o resultado |
 |---|---|---|
 | 0–3. Ambiente, código, dados e piloto | ✅ Concluídas | `PLANO.md` |
-| 4. Pré-treino (114M parâmetros, 2,5B tokens, 2 GPUs) | ✅ 15–16/11, 5h44, perplexidade final 18,8 | Servidor (`checkpoints/pretrain/`) e PC local |
+| 4. Pré-treino (114M parâmetros, 2,5B tokens, 2 GPUs) | ✅ 15–16/11, 5h44, perplexidade final 18,8 | Servidor (`checkpoints/pretrain/`), PC local e Hugging Face |
 | 5. Mid-training C (só chat, controle) | ✅ 16/11, servidor, 1h30 | Servidor (`checkpoints/mid_c/`) |
-| 5. Mid-training M (chat + 25% de matemática) | ✅ 16/11, RTX 4060 local, com acúmulo de gradiente | **Só no PC local** |
-| 6. SFT (a partir de M) | ✅ 16/11, RTX 4060 local | **Só no PC local** |
-| 7. Avaliação | 🟡 Pré-treino, M e SFT avaliados; **falta o C** | PC local (`results/final/*.json`) |
+| 5. Mid-training M (chat + 25% de matemática) | ✅ 16/11, RTX 4060 local, com acúmulo de gradiente | PC local e Hugging Face |
+| 6. SFT (a partir de M) | ✅ 16/11, RTX 4060 local | PC local e Hugging Face |
+| 7. Avaliação | 🟡 Pré-treino, M e SFT avaliados; **falta o C** | PC local (`results/final/*.json`) e Hugging Face (`results/`) |
 | 8. Demo, README, slides | ⏳ A fazer | — |
 
 ### Resultados até agora (mesma máquina, RTX 4060)
@@ -33,7 +33,7 @@ Atualizado em 16/11/2026, à noite. **Prazo: 19/11/2026.** Este arquivo compleme
 
 ## 2. Disponibilizar o modelo para o grupo
 
-Hoje o M, o SFT e os resultados **só existem num PC**. Um defeito no disco perderia tudo. Três destinos, em ordem de importância:
+**Publicado em 16/11:** https://huggingface.co/Xererr/slm-114m (público), com `pretrain/final.pt`, `mid_m/final.pt`, `sft/final.pt` e `results/{pretrain,mid_m,sft}.json`. **Falta enviar:** as curvas (`metrics.jsonl`), tudo do C (depois da tarefa 1) e a página do modelo (`README.md`, a partir de `hf/README.md`). Três destinos, em ordem de importância:
 
 | Destino | Para quê | Quem acessa |
 |---|---|---|
@@ -50,19 +50,27 @@ uv run hf auth login
 ```
 Cole o token quando ele pedir. Esperado: `Login successful`.
 
-Envio dos checkpoints. O primeiro `upload` cria o repositório. Troque `<usuario-hf>` pelo seu usuário. Cada arquivo tem ~456 MB.
+Envio dos checkpoints (~456 MB cada). O primeiro `upload` criou o repositório. **Feitos em 16/11:** pré-treino, M, SFT e `results`.
 
 ```powershell
-uv run hf upload <usuario-hf>/slm-114m ..\shared\checkpoints\pretrain\final.pt pretrain/final.pt
-uv run hf upload <usuario-hf>/slm-114m ..\shared\checkpoints\mid_m\final.pt mid_m/final.pt
-uv run hf upload <usuario-hf>/slm-114m ..\shared\checkpoints\sft\final.pt sft/final.pt
-uv run hf upload <usuario-hf>/slm-114m ..\shared\checkpoints\mid_c\final.pt mid_c/final.pt
-uv run hf upload <usuario-hf>/slm-114m results\final results
+uv run hf upload Xererr/slm-114m ..\shared\checkpoints\pretrain\final.pt pretrain/final.pt
+uv run hf upload Xererr/slm-114m ..\shared\checkpoints\mid_m\final.pt mid_m/final.pt
+uv run hf upload Xererr/slm-114m ..\shared\checkpoints\sft\final.pt sft/final.pt
+uv run hf upload Xererr/slm-114m ..\shared\checkpoints\mid_c\final.pt mid_c/final.pt
+uv run hf upload Xererr/slm-114m results\final results
 ```
 - O `mid_c` só existe localmente depois da cópia do servidor (seção 3, item 1).
-- **Público ou privado:** sem `--private`, o repositório é público (o professor acessa sem convite). Com `--private`, cada pessoa precisa ser convidada, o que exige uma *organization* no Hugging Face.
+- **Falta enviar** (mesma pasta `repo`, depois de um `git pull`):
+  ```powershell
+  uv run hf upload Xererr/slm-114m ..\shared\checkpoints\pretrain\metrics.jsonl pretrain/metrics.jsonl
+  uv run hf upload Xererr/slm-114m ..\shared\checkpoints\mid_m\metrics.jsonl mid_m/metrics.jsonl
+  uv run hf upload Xererr/slm-114m ..\shared\checkpoints\sft\metrics.jsonl sft/metrics.jsonl
+  uv run hf upload Xererr/slm-114m hf\README.md README.md
+  ```
+  O último cria a página do modelo. Os do C estão na tarefa 1 (seção 3).
+- **Público** (decisão de 16/11): o professor e o grupo acessam sem convite.
 - Se o envio cair, rode o mesmo comando de novo.
-- Conferir: abrir `https://huggingface.co/<usuario-hf>/slm-114m` e ver as 4 pastas.
+- Conferir: abrir `https://huggingface.co/Xererr/slm-114m` e ver as 4 pastas.
 
 ### B. Cópia no servidor (PowerShell, na pasta `SLM`)
 
@@ -98,7 +106,7 @@ Estimativas de esforço (*estimativa*; entre parênteses, o dobro, por seguranç
 | # | Tarefa | Quem | Tempo |
 |---|---|---|---|
 | 1 | **Avaliar o C** no PC local | Guilherme | 30 min (1h) |
-| 2 | **Disponibilizar o modelo** (seção 2) | Guilherme | 1h (2h) |
+| 2 | **Disponibilizar o modelo** (seção 2): 🟡 checkpoints publicados; faltam curvas, C e página do modelo | Guilherme | 15 min (30 min) |
 | 3 | **Exemplos de geração** | Qualquer membro | 30 min (1h) |
 | 4 | **Gráficos** das curvas (pré-treino, M, C, SFT) | Orange escreve o script; um membro roda | 1,5h (3h) |
 | 5 | **README** reproduzível por etapa + `CREDITS.md` | Orange escreve; grupo revisa | 2h (4h) |
@@ -109,8 +117,15 @@ Estimativas de esforço (*estimativa*; entre parênteses, o dobro, por seguranç
 
 ### 1. Avaliar o C
 1. Copiar `checkpoints/mid_c/final.pt` do servidor para `shared\checkpoints\mid_c\` e conferir o SHA-256 nos dois lados.
-2. Rodar de novo `uv run python scripts/run_local.py`, na pasta `repo`. M e SFT são pulados (já existem), só o C é avaliado (~25 min), e o script roda a comparação **`mid_c x mid_m`**.
-3. Isso fecha o critério principal da Seção 6 do `PLANO.md`: M acima do pré-treino **e** acima de C em aritmética.
+2. Copiar também `checkpoints/mid_c/metrics.jsonl` (curva do C, para os gráficos).
+3. Rodar de novo `uv run python scripts/run_local.py`, na pasta `repo`. M e SFT são pulados (já existem), só o C é avaliado (~25 min), e o script roda a comparação **`mid_c x mid_m`**.
+4. Publicar no Hugging Face:
+   ```powershell
+   uv run hf upload Xererr/slm-114m ..\shared\checkpoints\mid_c\final.pt mid_c/final.pt
+   uv run hf upload Xererr/slm-114m ..\shared\checkpoints\mid_c\metrics.jsonl mid_c/metrics.jsonl
+   uv run hf upload Xererr/slm-114m results\final results
+   ```
+5. Isso fecha o critério principal da Seção 6 do `PLANO.md`: M acima do pré-treino **e** acima de C em aritmética.
 
 ### 3. Exemplos de geração
 A entrega pede exemplos. Sugestão:
@@ -138,12 +153,14 @@ Gráficos sugeridos: (a) loss de treino e de validação do pré-treino, com a f
 
 ### 5. README e créditos
 - **README:** o que é o projeto; como instalar (`uv sync`); como baixar o modelo; um comando por etapa (preparar dados, pré-treino, mid, SFT, avaliação, demo); tabela de resultados; links para o Hugging Face e os slides.
+- **Página do modelo no Hugging Face:** escrita em `hf/README.md` (16/11); falta enviar (seção 2). Atualizar a linha do C na tabela depois da tarefa 1.
 - **CREDITS.md:** o enunciado exige crédito a código de terceiros adaptado. Listar as referências da Seção "Referências" do `PLANO.md` que inspiraram código (por exemplo, nanochat e SmolLM3) e o uso de IA na escrita do código.
 
 ### 6. Slides: ver a seção 5.
 
 ### 8. PR e ensaio
-- O PR para o repositório do grupo sai da branch `midtraining-m`, que contém pré-treino, C e M. A `mid-sft` é uma versão antiga, só para o servidor.
+- PRs #1 (piloto e pré-treino) e #2 (C) já aceitos. PR final da `midtraining-m`: a abrir em https://github.com/FHaggs/slm/compare/main...Xererr:slm-scherer:midtraining-m. Commits novos nesta branch (por exemplo, o resultado do C) entram no PR automaticamente enquanto ele estiver aberto.
+- A `mid-sft` é uma versão antiga, só para o servidor: **não abrir PR dela**.
 - **Ensaio cronometrado:** 10–15 min, com a demo ao vivo. Todo o grupo precisa saber explicar o código (haverá perguntas; ver seção 6).
 
 ### Pontos para conferir no enunciado antes de entregar
@@ -162,16 +179,17 @@ Gráficos sugeridos: (a) loss de treino e de validação do pré-treino, com a f
 Requisitos: `git` e o [`uv`](https://docs.astral.sh/uv/). Testado no Linux do servidor e no Windows 11; **não testado no macOS**.
 
 ```bash
-git clone <URL do repositório>
-cd <pasta do repositório>
+git clone https://github.com/Xererr/slm-scherer.git
+cd slm-scherer
 git checkout midtraining-m
 uv sync
 ```
+Depois que o PR final for aceito, o mesmo código fica na branch `main` de https://github.com/FHaggs/slm.
 O `uv sync` instala o Python 3.12 e o PyTorch 2.11 com CUDA 12.8 (~3 GB). Sem GPU NVIDIA, o mesmo pacote roda em CPU, só que mais devagar.
 
-Baixar o modelo do Hugging Face (troque `<usuario-hf>`):
+Baixar o modelo do Hugging Face:
 ```bash
-uv run hf download <usuario-hf>/slm-114m sft/final.pt mid_m/final.pt --local-dir modelos
+uv run hf download Xererr/slm-114m sft/final.pt mid_m/final.pt --local-dir modelos
 ```
 Os arquivos ficam em `modelos/sft/final.pt` e `modelos/mid_m/final.pt`.
 
