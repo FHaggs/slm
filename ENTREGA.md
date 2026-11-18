@@ -250,6 +250,20 @@ uv run python scripts/compare.py results/mid_m.json results/sft.json
 
 ---
 
+### 4.5. Conversar no servidor (CDIA)
+Cópia do Hugging Face (baixada em 18/11, SHA-256 igual ao do HF): `/scratch/ap211/slm-shared/hf/slm-114m/{pretrain,mid_m,sft}/final.pt`, mais `metrics.jsonl` de cada um e `results/{pretrain,mid_m,sft}.json`.
+
+**Atenção:** `checkpoints/mid_m/final.pt` e `checkpoints/sft/final.pt` do diretório compartilhado **não são** os do HF (SHA-256 diferente; vieram do job do servidor, não da RTX 4060). Os resultados da tabela da seção 1 são dos do HF. O `pretrain` é idêntico nos dois lugares; o `mid_c` só existe em `checkpoints/`.
+
+Terminal (não precisa de navegador), no login node:
+```bash
+cd ~/slm
+srun --gres=gpu:1 -c 4 --mem=16G -t 60 --pty bash -c '
+  source .venv/bin/activate
+  python scripts/chat_cli.py --checkpoint /scratch/ap211/slm-shared/hf/slm-114m/sft/final.pt'
+```
+Comandos: `/reset`, `/temp 0.5`, `/topk 20`, `/max 300`, `/quit`. Troque `sft` por `mid_m`, `pretrain` ou `/scratch/ap211/slm-shared/checkpoints/mid_c/final.pt` para comparar. O `srun` conta como o seu único job (`MaxSubmit=1`) e espera na fila se as GPUs estiverem ocupadas; saia com `/quit` para liberar. Em CPU (sem `srun`, só para teste) funciona, mas é lento.
+
 ## 5. Roteiro da apresentação (10–15 min)
 
 | # | Slide | Conteúdo | Tempo |
