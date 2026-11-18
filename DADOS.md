@@ -56,13 +56,27 @@ Gerados por `sbatch slurm/mid_c.sbatch` (config `configs/final/mid_c.yaml`) em `
 | Arquivo | Conteúdo |
 |---|---|
 | `ckpt_<step>.pt` | Pesos, estado do AdamW e posição nos dados, a cada 2.500 steps (~15 min); ficam os 2 últimos. ~1,37 GB cada (mesmo modelo do pré-treino) |
-| `final.pt` | Pesos no fim (passo 14.669; ~0,46 GB, o mesmo tamanho do `final.pt` do pré-treino). Se ele existe, o job não faz nada |
+| `final.pt` | Pesos no fim (passo 14.669): 456.503.035 bytes, gerado em 16/11 (job 1173). Se ele existe, o job não faz nada |
 | `metrics.jsonl` | Loss, LR, norma do gradiente e tokens/s; a cada 1.500 steps, também `val_loss`, `val_ppl` e a aritmética (`arith_acc` e uma coluna por célula), que formam a curva do mid |
 | `.lock` | Trava (`flock`) do job |
 
 - **1 época:** o último lote completa o batch com 21 registros da época seguinte (menos de 0,01%).
 - **Retomada:** qualquer membro resubmete o mesmo `sbatch` pela própria conta.
 - **M e SFT não ficam aqui:** rodam localmente (decisão de 15/11), e os checkpoints ficam na máquina local. Para a avaliação final, o `mid_c/final.pt` é copiado para essa máquina.
+
+## Cópia local (M e SFT)
+
+Em 16/11, um arquivo `.tar` de 2.443.468.800 bytes foi gerado no servidor e baixado para a máquina local (SHA-256 conferido nos dois lados). Conteúdo, com a mesma estrutura do diretório compartilhado:
+
+| Caminho | Uso |
+|---|---|
+| `data/mid_m/{train,val}` (sem `mask.bin`) | Mid-training M (não usa máscara) |
+| `data/mid_c/{train,val}` (sem `mask.bin`) | Reserva, caso o C também precise rodar localmente |
+| `data/sft/{train,val}` (com `mask.bin`) | SFT |
+| `data/pretrain/val` | Perplexidade no FineWeb, nas avaliações |
+| `checkpoints/pretrain/final.pt` e `metrics.jsonl` | Ponto de partida do M; curva do pré-treino para os gráficos |
+
+Localmente, o `scripts/run_local.py` grava em `shared/checkpoints/{mid_m,sft}` (mantendo os 2 últimos checkpoints periódicos), os resultados em `results/final/*.json` no clone e os logs em `logs/local_run.log` e `logs/local_status.txt`. A pasta irmã `local-cache/` guarda o cache dos benchmarks. Em 16/11 foram gerados `results/final/{pretrain,mid_m,sft}.json` (ainda não versionados) e os `final.pt` de `mid_m` e `sft` na máquina local, sem cópia no servidor. **Publicado em 16/11** no Hugging Face (`Xererr/slm-114m`, público): `pretrain/final.pt`, `mid_m/final.pt`, `sft/final.pt` e `results/{pretrain,mid_m,sft}.json`. Falta enviar: `mid_c/`, os `metrics.jsonl` e o `README.md` (página do modelo, a partir de `hf/README.md` deste repositório). *Planejado:* copiar M e SFT para `checkpoints/{mid_m_local,sft_local}` no diretório compartilhado (`ENTREGA.md`, seção 2).
 
 ## Fora do diretório compartilhado
 

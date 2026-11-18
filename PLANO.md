@@ -14,7 +14,10 @@ Atualizado em 16/11/2026. **Prazo: 19/11/2026** (3 dias). Os itens marcados como
 - **(15/11) Acúmulo de gradiente no M local:** micro-lotes somados até 24 registros por passo, com a loss ponderada pelos tokens válidos do passo inteiro (não pela média de cada micro-lote, que distorce com padding e máscara). Assim o M local tem o mesmo batch efetivo, LR, schedule e ordem de dados do C no servidor. Só entra depois dos testes de equivalência em CPU (Fase 5).
 - **(15/11) Avaliação dos 4 modelos (pré, M, C e SFT) numa única máquina**, no fim, para a comparação (McNemar) não misturar GPUs.
 - **(15/11) Branches:** `midtraining-c` sai da `pre-treino` (um PR só para pré-treino e C); `midtraining-m` sai da `midtraining-c`. A `mid-sft` fica parada, para ser reaproveitada no SFT.
+- **(16/11) PRs:** #1 (`main` do fork: piloto e pré-treino) aceito em 15/11; #2 (`midtraining-c`) aceito em 16/11. PR final da `midtraining-m`: a abrir em https://github.com/FHaggs/slm/compare/main...Xererr:slm-scherer:midtraining-m. A `mid-sft` não vai para PR (anterior ao #2).
 - **(15/11) GPUs alternativas avaliadas e descartadas:** RX 7800 XT de 16 GB (ROCm só tem suporte no Linux; no Windows, a AMD declara que não há suporte a treino), RTX 3050 e RTX 2060 Super (8 GB ou menos; a 2060 Super não tem bf16).
+- **(16/11) M e SFT também no servidor:** com o C pronto e uma GPU aparentemente livre, foi submetido o `slurm/mid_sft.sbatch` (branch `mid-sft`, job 1175): avaliação do pré-treino → M → C (pulado, já existe) → SFT → avaliações de M, C e SFT → McNemar, tudo em 1 GPU, lote 24 sem acúmulo. O M local (RTX 4060, com acúmulo) continua como reserva e como teste do acúmulo de gradiente. *Proposta (a decidir):* o M e o SFT do servidor como oficiais, por terem a mesma GPU, o mesmo lote e o mesmo ambiente do C.
+- *(16/11, noite) A decidir:* M, SFT e as avaliações locais terminaram às 11h18 de Seg 16. Proposta do Orange: usar o M e o SFT **locais** como oficiais, avaliar o C na mesma máquina local e cancelar o job 1175 (que só começaria Qua 18, 11h58), liberando a GPU para as outras turmas.
 
 ---
 
@@ -27,7 +30,7 @@ Revisado em 10/11 e 11/11: a Fase 3 começou com ~2 dias de atraso em relação 
 | Qui 05 – Seg 09 | Fases 0, 1 e 2: ambiente, núcleo de treino, smoke tests, dados | ✅ Concluídas (dados prontos em 09/11) |
 | Ter 10 – Qua 11 | Fase 3: piloto ✅ (job 1140, Qua 11, 13h54–15h24) | **Decisão (pendente do grupo): manter a matemática; tokenizer GPT-2** |
 | Qua 11 – Seg 16 | Fase 4: pré-treino final em **2 GPUs** (job 1152) ✅: Dom 15, 18h32 → Seg 16, 00h16 (5h44); val_ppl final 18,8 | Checkpoint publicado |
-| Seg 16 – Qua 18 | Fase 5: mid-training. **C no servidor** (job 1173, na fila desde Seg 16 ~00h40; pior caso de início Qua 18, ~00h16) e **M local** (RTX 4060 com acúmulo de gradiente, a partir de Seg 16 à noite) | Veredito da matemática |
+| Seg 16 – Qua 18 | Fase 5: mid-training. **C no servidor** (job 1173 ✅: Seg 16, 10h28–11h58, 1h30) e **M local** (RTX 4060 com acúmulo de gradiente, a partir de Seg 16 à noite) | Veredito da matemática |
 | Ter 17 | Fase 6: SFT local, a partir de M, na sequência do M | Checkpoint final |
 | Qua 18 | Fase 7: avaliação dos 4 modelos numa só máquina; Fase 8: demo | Tabelas e demo funcionando |
 | Ter 17 – Qua 18 | Fase 8: README, checkpoints no HF, slides, ensaio | Entrega pronta |
@@ -279,7 +282,7 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [x] Config e job: `configs/final/pretrain.yaml` e `slurm/pretrain.sbatch`. 1 época (2.497.560.576 tokens), LR 3e-4, warmup de 100M tokens, avaliação a cada 2.500 steps (~15 min), checkpoint a cada 5.000 steps (~30 min). Reserva de 36h
 - [x] Submetido: job 1152 (`ap205`), Qua 11 à tarde, commit `ab19f1a`. Pasta de checkpoints vazia antes da submissão (treino parte do zero)
 - [x] Início: Dom 15/11 às 18h32 (job 1152), em 2× RTX A5000, ~20h depois da previsão de 13/11 e ~95h depois da submissão. O 1156, submetido depois, começou antes; causa não identificada
-- [x] **Concluído** (job 1152, `COMPLETED`, exit 0): Seg 16 às 00h16, em 5h44 (estimativa: ~5–6h). 50.813 steps, 2.497.560.576 tokens, ~122,6 mil tok/s até o fim. Perplexidade de validação: 23,6 no step 25.000 → **18,82** no fim (o decaimento do WSD, nos 10% finais, baixou a loss de treino de ~3,25 para ~3,13). `final.pt` com 456.503.035 bytes; marcos guardados em `checkpoints/pretrain_marcos/` (`final.pt` e `ckpt_000045000.pt`)
+- [x] **Concluído** (job 1152, `COMPLETED`, exit 0): Seg 16 às 00h16, em 5h44 (estimativa: ~5–6h). 50.813 steps, 2.497.560.576 tokens, ~122,6 mil tok/s até o fim. Perplexidade de validação: 23,6 no step 25.000 → **18,82** no fim; loss de treino ~3,13 nos últimos steps. *Correção (16/11):* uma versão anterior deste item dizia que o decaimento baixou a loss de treino "de ~3,25 para ~3,13"; o ~3,25 não tinha fonte (o trecho do log conferido começa no step 50.300). O efeito do decaimento será medido no gráfico do `metrics.jsonl`. `final.pt` com 456.503.035 bytes; marcos guardados em `checkpoints/pretrain_marcos/` (`final.pt` e `ckpt_000045000.pt`)
 - [x] Marcos: `keep_last: 3`, e no fim do job o `slurm/pretrain.sbatch` copia o `final.pt` e o `ckpt_000045000.pt` para `checkpoints/pretrain_marcos/`. O decaimento do WSD começa no passo 45.733; o ckpt 45.000 é o último da fase estável e permite refazer o decaimento
 - [x] Checkpoint a cada ~34 min (1,37 GB cada), mantendo os 3 últimos: confirmado em 15/11 (ckpts 15.000, 20.000 e 25.000)
 - [ ] Logar loss e perplexidade de validação (`metrics.jsonl`, junto dos checkpoints); guardar amostras de geração
@@ -288,14 +291,23 @@ Modelo de ~32M (d=384, L=8) em 500M tokens: ~1h por run em 1 GPU (medido: 184 mi
 - [ ] Regra do grupo: o pré-treino só roda por `sbatch slurm/pretrain.sbatch`. Rodar `scripts/pretrain.py` direto ignora a trava e pode corromper os checkpoints compartilhados
 - [ ] Amostras de geração, HellaSwag e ARC do checkpoint final: *proposta* de rodar o `evaluate.py` no início do job da Fase 5, sem gastar uma entrada a mais na fila
 
-**Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF.
+**Saída:** curvas sem anomalias; texto coerente; HellaSwag acima do acaso. **Publicar o checkpoint** no HF. ✅ Publicado em 16/11 (`Xererr/slm-114m`, `pretrain/final.pt`).
 
 ### Fase 5: Mid-training
 - [x] **Onde rodar (decidido em 15/11):** C no servidor; M e SFT localmente, com acúmulo de gradiente. Ver Decisões fechadas
 - [x] C: config `configs/final/mid_c.yaml` (pesos do pré-treino final, otimizador zerado, LR 3e-4, warmup de 10M tokens, 1 época = 14.669 steps, ~292M tokens úteis; aritmética a cada 1.500 steps) e job `slurm/mid_c.sbatch` (1 GPU, limite de 6h, só treino; aborta sem o `pretrain/final.pt`; trava própria)
 - [x] C: submetido pelo `ap205` em Seg 16 ~00h40 (job 1173, branch `midtraining-c`), assim que o pré-treino liberou a vaga. 2º na fila de GPU, atrás do 1172 (1 GPU, 2 dias); as 2 GPUs estão com jobs de 2 dias iniciados Seg 16 ~00h16. Pior caso de início: Qua 18 ~00h16; fim ~Qua 18 ~03h (*estimativa*)
-- [ ] *Proposta (16/11, a decidir):* se o 1173 não tiver começado quando o M e o SFT locais terminarem, rodar o C também localmente (mesma máquina e mesmo acúmulo) e usar o que terminar primeiro, cancelando o outro
-- [ ] M: mesmos hiperparâmetros do C, localmente, com acúmulo de gradiente (branch `midtraining-m`). Antes do run: testes de equivalência em CPU (um passo com 24 registros de uma vez igual a 6 micro-lotes de 4; padding e máscara desiguais entre micro-lotes; treino curto inteiro; retomada; os 44 testes atuais sem mudança), benchmark local para escolher o micro-lote e ~50 passos reais conferindo a primeira `val_loss`
+- [x] **C concluído** (job 1173, `COMPLETED`, exit 0): Seg 16, das 10h28 às 11h58 (1h30; estimativa: 1,5–3h), a ~68,8 mil tok/s. 14.669 steps. Perplexidade na validação do chat: 22,8 → **4,86** (o decaimento final baixou de 5,47 para 4,86). Aritmética: 0,81% → **1,17%**, oscilando entre 0,99% e 2,44% ao longo do treino, sem tendência (no piloto, C terminou em 1,3%). Células finais: soma de 1 dígito 4,9%, multiplicação de 1 dígito 9,9%, 2 dígitos ~0
+- [x] Mesma avaliação em GPUs diferentes: o `step 0` do C (servidor) e o do M local medem o mesmo modelo (o pré-treino). `val_loss` idêntica (3,1256), mas a aritmética deu 0,81% no servidor e 0,72% localmente (1 item de 1.107). Reforça a decisão de avaliar os 4 modelos na mesma máquina
+- [ ] M e SFT no servidor: job 1175 (`slurm/mid_sft.sbatch`), submetido Seg 16 à tarde; na fila (Resources). O 1174 (`ap220`) ocupa as **2 GPUs** (`gres:gpu:2`) desde Seg 16 11h58; previsão do Slurm para o 1175: Qua 18, 11h58. Redundante com o run local (ver decisão a tomar)
+- [x] M: acúmulo de gradiente implementado em `slm/trainer.py` (`grad_accum`, padrão 1 = caminho anterior, sem mudança). Cada passo soma `grad_accum` micro-lotes, com a loss somada por token e dividida pelos tokens válidos do passo inteiro
+- [x] Testes de equivalência em CPU (`tests/test_grad_accum.py`, **6 de 6 passando** em 16/11): um passo com 24 registros = 6 micro-lotes de 4 (loss e gradientes), também com padding e máscara desiguais entre micro-lotes; controle mostrando que a média simples por micro-lote **não** bate; treino curto inteiro (pesos finais, curva e validação iguais); retomada com acúmulo; valor inválido recusado
+- [x] Testes antigos no notebook (Windows, CPU): 48 de 50 passando. Os 2 que falham **falham igual no código original** (falta o `streamlit` no ambiente de teste; o teste de 2 processos não abre a conexão local no Windows). Não têm relação com o acúmulo; no servidor (Linux) os 44 passavam
+- [x] Configs locais (`configs/local/mid_m.yaml` e `sft.yaml`): mesmos hiperparâmetros do servidor, lote efetivo de 24, sem `torch.compile` (sem suporte oficial no Windows) e a mesma validação de 800 registros do C. O micro-lote é escolhido pelo `scripts/run_local.py` conforme a memória livre
+- [x] `scripts/evaluate.py`: opções `--ppl-batch-size` e `--gsm-batch-size` (padrões iguais aos do servidor), para a avaliação caber em 8 GB
+- [x] Dados transferidos para o PC local em 16/11 (2,44 GB, SHA-256 idêntico nos dois lados)
+- [x] Checagem local (16/11, 02h06): dados ok, 394 GB livres, RTX 4060 com 6,9 de 8,0 GiB livres, bf16 ok. Medição dos micro-lotes: 8 e 6 passaram da memória física (10,86 e 9,22 GiB) e o Windows usou a RAM sem erro, ficando ~6–8x mais lentos (2,2 e 2,8 mil tok/s); 4 ficou no limite (6,85 GiB, 12,2 mil); **3 escolhido** (5,09 GiB, 18,0 mil tok/s; 3 × 8 = 24); 2 e 1 cabem, mais lentos
+- [x] **M e SFT locais concluídos** (RTX 4060, micro-lote 3 × 8 = 24): início Seg 16 às 02h29; M e SFT prontos antes das 10h01; avaliações das 10h01 às 11h18 (~25–27 min por modelo). `step 0` do M: val_loss 3,1256 (val_ppl 22,8) no chat de M; `step 100`: 16,5 mil tok/s. O "step ~1000" visto às 08h30 era, muito provavelmente, do SFT (5.070 steps), já em andamento
 - [ ] Rodar os testes e aplicar o critério da Seção 6
 - [ ] Acompanhar a perplexidade no FineWeb: na miniatura, ela piorou após o mid (de ~154 para ~242); no piloto, de 32,4 para 61,4 (M) e 56,4 (C)
 
@@ -336,23 +348,61 @@ Cuidados:
 - Se o job cair ou estourar o limite, basta resubmeter o mesmo `sbatch`: ele retoma do último checkpoint. Se o `final.pt` do C já existir, o job não faz nada.
 - Avisar o grupo ao submeter e ao terminar. O resultado fica em `checkpoints/mid_c/final.pt`, no diretório compartilhado (ver `DADOS.md`).
 
+#### Como rodar o M e o SFT localmente (Windows 11, RTX 4060 de 8 GB)
+
+Estrutura esperada (os nomes das pastas `repo` e `shared` importam; o resto do caminho pode ter espaços):
+
+```text
+<pasta do projeto>\
+├── shared\   # dados e checkpoints, com a mesma estrutura do servidor (data\..., checkpoints\pretrain\final.pt)
+└── repo\     # clone deste repositório, na branch midtraining-m
+```
+
+1. **Dados:** no servidor, juntar num `.tar` os conjuntos `mid_m`, `mid_c` (sem os `mask.bin`), `sft`, `pretrain/val` e o `checkpoints/pretrain/final.pt`; baixar com `scp -J <usuário>@<servidor de entrada> <usuário>@<servidor do cluster>:<arquivo> .`; conferir o SHA-256 nos dois lados (`sha256sum` e `Get-FileHash`); extrair com `tar xf <arquivo> -C shared`.
+2. **Ambiente:** instalar o `uv`, clonar o repositório em `repo`, `git checkout midtraining-m` e `uv sync` (PyTorch 2.11 + CUDA 12.8). Conferir: `uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.is_bf16_supported())"` deve imprimir `True True`.
+3. **Checagens (~5 min):** `uv run python scripts/run_local.py --check`. Confere os dados (tamanhos contra os `meta.json`), o espaço em disco (mínimo 12 GB), a GPU e o bf16, e mede a memória para escolher o micro-lote (o maior divisor de 24 que cabe com folga). Nada é treinado.
+4. **Rodar:** `uv run python scripts/run_local.py`. Ordem: M → SFT → avaliações (pré, M, SFT e, se o `mid_c\final.pt` estiver em `shared`, também o C) → comparações. O Windows não suspende enquanto ele roda (a tela pode apagar).
+5. **Acompanhar:** `logs\local_status.txt` (uma linha por etapa) e `logs\local_run.log` (tudo). Resultados em `results\final\*.json`; checkpoints em `shared\checkpoints\{mid_m,sft}`.
+6. **Se parar:** o script para no primeiro erro e registra o motivo no log. Depois de corrigir, rodar o mesmo comando: os treinos retomam do último checkpoint e as etapas concluídas são puladas.
+
+Cuidados: não usar a GPU para outra coisa durante o treino; desligar a suspensão e pausar as atualizações do Windows; não apagar nada em `shared\checkpoints` enquanto roda.
+
 **Saída:** veredito e checkpoint publicado.
 
 ### Fase 6: SFT
+- [x] SFT local concluído (16/11): a partir do M local, LR 2e-5, 1 época (5.070 steps, 124.600.320 tokens), micro-lote 3 × 8 = 24. Perplexidade na validação do SFT no fim: **4,66**
 - [ ] A partir de M. Máscara `-100` em tudo que não for resposta do assistente (incluir `<|end|>`, para o modelo aprender a parar)
 - [ ] LR 1e-5 a 3e-5, 1–2 épocas, subset curado; monitorar validação para detectar overfitting
 
 **Saída:** para as mesmas perguntas, respostas melhores que no mid, com parada correta.
 
 ### Fase 7: Avaliação final
+- [x] **Avaliações locais (16/11, RTX 4060), pré-treino, M e SFT:**
+
+  | Modelo | Perplexidade (FineWeb) | HellaSwag | ARC-Easy | Aritmética | GSM8K | GSM8K: respondeu |
+  |---|---|---|---|---|---|---|
+  | Pré-treino | 18,77 | 28,1% | 50,8% | 0,7% | 1,9% | 86,4% |
+  | M | 61,07 | 27,1% | 37,2% | **3,2%** | **4,1%** | 99,4% |
+  | SFT | 62,65 | 27,4% | 37,3% | 3,1% | 2,8% | 99,5% |
+  | C | *a avaliar na mesma máquina* | | | | | |
+
+  McNemar, M contra o pré-treino: aritmética p = 7,4e-6 (8 → 35 acertos); GSM8K p = 0,0009; HellaSwag p = 0,0007 (queda de 1,0 ponto); ARC-Easy p = 2e-34 (queda de 13,6 pontos).
+  McNemar, SFT contra M: GSM8K p = 0,0498 (queda de 1,3 ponto, limítrofe); HellaSwag p = 0,047 (alta de 0,3 ponto, limítrofe); aritmética e ARC-Easy sem diferença.
+  Aritmética do M por célula: soma de 1 dígito 21,0%, multiplicação de 1 dígito 14,8%, subtração de 1 dígito 4,4%; 2 dígitos entre 0,3% e 0,7%.
+- [ ] **Critérios da Seção 6 (parcial, falta o C):** M acima do pré-treino em aritmética ✅ (p = 7,4e-6); M acima de C ⏳ (C ainda não avaliado na mesma máquina).
+  Transferência para o GSM8K: M acima do pré-treino (p = 0,0009) e, diferente do piloto, **não é só formato**: entre as perguntas respondidas com número, o acerto vai de 2,2% para 4,1%.
+  Sem regressão no HellaSwag: ❌ queda pequena, mas significativa (28,1% → 27,1%). A queda do ARC-Easy se repete (no piloto, ocorreu em M e em C); o C dirá se a causa é o chat ou a matemática
+- [ ] Avaliar o C localmente: copiar `checkpoints/mid_c/final.pt` (456.503.035 bytes, SHA-256 conferido) para `shared/checkpoints/mid_c/` e rodar de novo `scripts/run_local.py` (pula o que já existe, avalia o C e roda o McNemar M × C; ~25 min)
 - [ ] Em pré, C, M e SFT: perplexidade, HellaSwag, ARC-Easy (múltiplos benchmarks são diferencial), aritmética e GSM8K. Os 4 avaliados na mesma máquina local (decisão de 15/11), com o `mid_c/final.pt` copiado do servidor
 - [ ] Comparar antes e depois do SFT nas mesmas perguntas
 - [ ] Gerar tabelas e gráficos a partir de `results/*.json`
 
 ### Fase 8: Demo e entrega
+- [ ] **Checklist, comandos e tutorial de uso do modelo em `ENTREGA.md`** (16/11): disponibilizar os checkpoints (Hugging Face, cópia no servidor, resultados no Git), o que falta com estimativas, roteiro dos slides e perguntas prováveis
 - [ ] **Demo em Streamlit rodando localmente em notebook.** O login não aguenta e a GPU pode estar ocupada no dia. Exportar `safetensors` fp16 (~200 MB) e medir tokens/s em CPU
 - [ ] Ter um vídeo de reserva, caso a demo ao vivo falhe
-- [ ] Publicar os 3 checkpoints; README com reprodução por etapa e créditos
+- [x] Checkpoints publicados no Hugging Face (16/11): https://huggingface.co/Xererr/slm-114m (público), com `pretrain`, `mid_m`, `sft` e `results` (pré, M e SFT). Falta enviar: `mid_c`, os `metrics.jsonl` e a página do modelo (escrita em `hf/README.md`)
+- [ ] README com reprodução por etapa e créditos
 - [ ] Slides: arquitetura, Chinchilla, curvas, resultados, benchmark de matemática, discussão, demo (10–15 min)
 - [ ] Todo o grupo deve entender o código gerado com IA, pois haverá perguntas na apresentação
 
@@ -398,7 +448,8 @@ Dados e checkpoints ficam em `/scratch/ap211/slm-shared/`, nunca no Git. Estrutu
 | `/scratch` sem backup | Marcos copiados para `checkpoints/pretrain_marcos/` no fim do job (protege do `keep_last`, não de falha do disco). Publicar o `final.pt` no HF logo depois do treino |
 | Matemática sem efeito | Piloto (11/11): efeito significativo na aritmética (M × pré p = 0,0003; M × C p = 0,006), concentrado em 1 dígito. Tarefa reserva mantida; resultado negativo reportado com IC |
 | Mid-training piora o conhecimento geral | No piloto, o ARC-Easy caiu ~9 pp e a perplexidade no FineWeb quase dobrou após o mid (M e C). Medir no modelo final e discutir nos slides |
-| Acúmulo de gradiente com erro sutil (M diferente do C sem ninguém perceber) | Loss ponderada pelos tokens válidos do passo; testes de equivalência em CPU antes do run; primeira `val_loss` do M conferida |
+| Acúmulo de gradiente com erro sutil (M diferente do C sem ninguém perceber) | Loss ponderada pelos tokens válidos do passo; 6 testes de equivalência em CPU passando (16/11); primeira `val_loss` do M conferida |
+| GPU de 8 GB usar a RAM sem avisar (Windows), deixando o treino muito lento | O `run_local.py` escolhe o micro-lote pela memória livre, com folga, e mede a velocidade antes de começar |
 | Máquina local desligar ou reiniciar durante o M ou o SFT | Retomada pelo último checkpoint; desligar suspensão e atualizações automáticas antes de começar |
 | Geração em CPU lenta na demo | Medir com antecedência; vídeo de reserva |
 

@@ -56,6 +56,9 @@ def main() -> None:
     parser.add_argument("--mc-limit", type=int, help="limita os itens de multipla escolha")
     parser.add_argument("--gsm-limit", type=int, help="limita os itens do GSM8K")
     parser.add_argument("--gsm-new-tokens", type=int, default=160)
+    # Lotes de avaliacao: os padroes sao os do servidor (24 GB). Em GPU de 8 GB, reduzir (ver PLANO, Fase 5).
+    parser.add_argument("--ppl-batch-size", type=int, default=16)
+    parser.add_argument("--gsm-batch-size", type=int, default=32)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -65,7 +68,7 @@ def main() -> None:
     results: dict = {"checkpoint": args.checkpoint, "params": model.num_params()}
 
     if args.val_dir:
-        results["perplexity"] = perplexity(model, args.val_dir, args.val_records, batch_size=16)
+        results["perplexity"] = perplexity(model, args.val_dir, args.val_records, batch_size=args.ppl_batch_size)
         print("perplexidade:", results["perplexity"], flush=True)
 
     for name in args.benchmarks:
@@ -85,6 +88,7 @@ def main() -> None:
         tokenizer,
         test_rows,
         gsm_few_shot_prefix(train_rows),
+        batch_size=args.gsm_batch_size,
         max_new_tokens=args.gsm_new_tokens,
     )
     gsm["ci95"] = wilson_interval(sum(gsm["correct"]), len(gsm["correct"]))

@@ -1,0 +1,20 @@
+# Fase 6 (local): SFT a partir do M local, numa GPU de 8 GB, com acumulo de gradiente.
+# Mesmos hiperparametros de configs/final/sft.yaml (branch mid-sft): lote efetivo de 24, LR 2e-5,
+# 1 epoca, mascara nas respostas, e as mesmas 800 conversas de validacao (eval 4 x 200).
+run_dir: ${SLM_SHARED}/checkpoints/sft
+data_dir: ${SLM_SHARED}/data/sft/train
+val_dir: ${SLM_SHARED}/data/sft/val
+init_from: ${SLM_SHARED}/checkpoints/mid_m/final.pt
+use_loss_mask: true
+epochs: 1.0               # 121.663 registros = 5.070 steps (~98M tokens uteis)
+batch_size: 4             # micro-lote (sobrescrito pelo run_local.py)
+grad_accum: 6             # 4 x 6 = 24 (sobrescrito pelo run_local.py)
+peak_lr: 2.0e-5
+warmup_tokens: 3000000
+log_every: 50
+eval_every: 500           # validacao para detectar overfitting
+eval_batches: 200         # 200 x 4 = 800 registros, os mesmos da config do servidor (50 x 16)
+eval_batch_size: 4
+ckpt_every: 500
+keep_last: 2
+compile: false
