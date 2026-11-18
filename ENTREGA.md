@@ -23,10 +23,12 @@ Atualizado em 16/11/2026, à noite. **Prazo: 19/11/2026.** Este arquivo compleme
 | Pré-treino | 18,77 | 28,1% | 50,8% | 0,7% | 1,9% | 86,4% |
 | M | 61,07 | 27,1% | 37,2% | **3,2%** | **4,1%** | 99,4% |
 | SFT | 62,65 | 27,4% | 37,3% | 3,1% | 2,8% | 99,5% |
-| C | *a avaliar* | | | | | |
+| C (servidor, CPU, fp32) | 54,01 | 27,4% | 36,9% | 1,2% | *falta (precisa de GPU)* | |
 
 - **M contra o pré-treino (McNemar):** aritmética p = 7,4e-6 (de 8 para 35 acertos); GSM8K p = 0,0009. Entre as perguntas respondidas com número, o acerto do GSM8K sobe de 2,2% para 4,1%. **Não é só formato**, diferente do piloto.
-- **Regressões:** HellaSwag −1,0 ponto (p = 0,0007) e ARC-Easy −13,6 pontos (p = 2e-34). O C vai dizer se a causa é o chat ou a matemática.
+- **C contra M (McNemar):** aritmética p = 0,0005 (M acerta 30 itens que o C erra; o C, 8): **o ganho é da matemática**. HellaSwag p = 0,24 e ARC-Easy p = 0,83: sem diferença. A queda do ARC-Easy (−13,9 pontos do pré-treino ao C, p = 9e-38) vem do **chat**, não da matemática.
+- **Regressões do M contra o pré-treino:** HellaSwag −1,0 ponto (p = 0,0007) e ARC-Easy −13,6 pontos (p = 2e-34).
+- **Gráficos:** `results/final/figs/{pretrain_loss,mid_aritmetica,sft_loss,resultados}.png` (gerados por `scripts/plot_curves.py` e `scripts/plot_results.py`).
 - **SFT contra M:** praticamente igual. GSM8K −1,3 ponto (p = 0,0498, no limite).
 
 ---
@@ -116,6 +118,8 @@ Estimativas de esforço (*estimativa*; entre parênteses, o dobro, por seguranç
 | 9 | *Opcional:* exportar em fp16 e medir a velocidade em CPU | Orange escreve; um membro roda | 1,5h (3h) |
 
 ### 1. Avaliar o C
+**Feito em 18/11, exceto o GSM8K:** `results/final/mid_c.json` e os McNemar em `results/final/compare_*.txt` (job de CPU no servidor, `slurm/eval.sbatch`). **Falta o GSM8K do C**: em CPU a geração leva ~15 h (sem cache de atenção), então rode numa GPU (`uv run python scripts/run_local.py` com o `mid_c/final.pt` copiado: refaz só o que falta no C? **não**: o `evaluate.py` refaz tudo, ~25 min) e substitua o `mid_c.json`. Os passos originais seguem abaixo.
+
 1. Copiar `checkpoints/mid_c/final.pt` do servidor para `shared\checkpoints\mid_c\` e conferir o SHA-256 nos dois lados.
 2. Copiar também `checkpoints/mid_c/metrics.jsonl` (curva do C, para os gráficos).
 3. Rodar de novo `uv run python scripts/run_local.py`, na pasta `repo`. M e SFT são pulados (já existem), só o C é avaliado (~25 min), e o script roda a comparação **`mid_c x mid_m`**.

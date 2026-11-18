@@ -1,0 +1,5 @@
+A = results/final/mid_c.json
+B = results/final/mid_m.json
+hellaswag      A=0.2737 B=0.2707 | so A=318 so B=288 | p=0.2388
+arc_easy       A=0.3691 B=0.3716 | so A=263 so B=269 | p=0.8284
+arithmetic     A=0.0117 B=0.0316 | so A=8 so B=30 | p=0.000472

@@ -56,6 +56,7 @@ def main() -> None:
     parser.add_argument("--mc-limit", type=int, help="limita os itens de multipla escolha")
     parser.add_argument("--gsm-limit", type=int, help="limita os itens do GSM8K")
     parser.add_argument("--gsm-new-tokens", type=int, default=160)
+    parser.add_argument("--skip-gsm8k", action="store_true", help="sem GSM8K (a geracao nao usa cache: so vale em GPU)")
     # Lotes de avaliacao: os padroes sao os do servidor (24 GB). Em GPU de 8 GB, reduzir (ver PLANO, Fase 5).
     parser.add_argument("--ppl-batch-size", type=int, default=16)
     parser.add_argument("--gsm-batch-size", type=int, default=32)
@@ -67,18 +68,28 @@ def main() -> None:
     model, tokenizer = load_model(args.checkpoint, device)
     results: dict = {"checkpoint": args.checkpoint, "params": model.num_params()}
 
+    def save() -> None:  # grava a cada etapa: uma queda nao perde o que ja foi medido
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(results))
+
     if args.val_dir:
         results["perplexity"] = perplexity(model, args.val_dir, args.val_records, batch_size=args.ppl_batch_size)
         print("perplexidade:", results["perplexity"], flush=True)
+        save()
 
     for name in args.benchmarks:
         result = run_multiple_choice(model, tokenizer, load_multiple_choice(name, args.mc_limit))
         results[name] = result
         print(f"{name}: {result['accuracy']:.4f} (media por token: {result['accuracy_mean']:.4f})", flush=True)
+        save()
 
     arithmetic = run_arithmetic(model, tokenizer, arithmetic_items())
     results["arithmetic"] = arithmetic
     print(f"aritmetica: {arithmetic['accuracy']:.4f} {arithmetic['cells']}", flush=True)
+    save()
+    if args.skip_gsm8k:
+        print(f"salvo em {args.output} (sem GSM8K)", flush=True)
+        return
 
     train_rows = list(load_dataset("openai/gsm8k", "main", split="train").select(range(3)))
     test = load_dataset("openai/gsm8k", "main", split="test")
@@ -95,8 +106,7 @@ def main() -> None:
     results["gsm8k"] = gsm
     print(f"gsm8k: {gsm['accuracy']:.4f} IC95 {gsm['ci95']} respondeu {gsm['answered']:.3f}", flush=True)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(results))
+    save()
     print(f"salvo em {args.output}", flush=True)
 
 

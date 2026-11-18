@@ -1,0 +1,5 @@
+A = results/final/pretrain.json
+B = results/final/mid_c.json
+hellaswag      A=0.2808 B=0.2737 | so A=496 so B=424 | p=0.01919
+arc_easy       A=0.5080 B=0.3691 | so A=507 so B=177 | p=9.363e-38
+arithmetic     A=0.0072 B=0.0117 | so A=6 so B=11 | p=0.3323
